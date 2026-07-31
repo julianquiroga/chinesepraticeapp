@@ -150,6 +150,16 @@ function isDue(cardId, progress) {
   return p.nextReview <= Date.now();
 }
 
+// ---------- Modo: Construir frases ----------
+function isGoodForBuilder(card) {
+  const zh = card.zh;
+  if (card.unitName.includes("📐")) return false;
+  if (/[\/（(]/.test(zh)) return false;
+  if (/[A-Za-z]/.test(zh)) return false;
+  if (zh.includes("……") || zh.includes("___")) return false;
+  return true;
+}
+
 function App() {
   const [selectedUnits, setSelectedUnits] = useState([1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19]);
   const [mode, setMode] = useState("menu");
@@ -189,6 +199,70 @@ function App() {
     setRatings({});
     setMode("study");
   };
+
+  // ---------- Modo: Construir frases ----------
+  const [buildDeck, setBuildDeck] = useState([]);
+  const [buildIdx, setBuildIdx] = useState(0);
+  const [pool, setPool] = useState([]);
+  const [answer, setAnswer] = useState([]);
+  const [buildResult, setBuildResult] = useState(null);
+  const [buildStats, setBuildStats] = useState({ correct: 0, wrong: 0 });
+  const [showBuildAnswer, setShowBuildAnswer] = useState(false);
+
+  const buildableCards = ALL_CARDS.filter(c => selectedUnits.includes(c.unit) && isGoodForBuilder(c));
+  const buildCard = buildDeck[buildIdx];
+
+  const shuffleTilesFor = (c) => {
+    const chars = Array.from(c.zh).map((ch, i) => ({ ch, uid: c.id + "-" + i + "-" + Math.random() }));
+    setPool([...chars].sort(() => Math.random() - 0.5));
+    setAnswer([]);
+    setBuildResult(null);
+    setShowBuildAnswer(false);
+  };
+
+  const startBuild = () => {
+    const shuffled = [...buildableCards].sort(() => Math.random() - 0.5);
+    setBuildDeck(shuffled);
+    setBuildIdx(0);
+    setBuildStats({ correct: 0, wrong: 0 });
+    shuffleTilesFor(shuffled[0]);
+    setMode("build");
+  };
+
+  const tapPoolTile = (tile) => {
+    setPool(prev => prev.filter(t => t.uid !== tile.uid));
+    setAnswer(prev => [...prev, tile]);
+  };
+
+  const tapAnswerTile = (tile) => {
+    setAnswer(prev => prev.filter(t => t.uid !== tile.uid));
+    setPool(prev => [...prev, tile]);
+    setBuildResult(null);
+  };
+
+  const nextBuildCard = () => {
+    if (buildIdx + 1 >= buildDeck.length) {
+      setMode("buildResults");
+    } else {
+      const next = buildIdx + 1;
+      setBuildIdx(next);
+      shuffleTilesFor(buildDeck[next]);
+    }
+  };
+
+  // Autocalifica cuando ya se colocaron todas las fichas
+  useEffect(() => {
+    if (mode === "build" && buildCard && pool.length === 0 && answer.length > 0 && buildResult === null) {
+      const built = answer.map(t => t.ch).join("");
+      const correct = built === buildCard.zh;
+      setBuildResult(correct ? "correct" : "wrong");
+      setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
+      if (correct) {
+        speak(buildCard.zh);
+        setTimeout(() => nextBuildCard(), 1200);
+      }
+    }
+  }, [pool.length, mode]);
 
   const startStudy = () => {
     const filtered = ALL_CARDS.filter(c => selectedUnits.includes(c.unit));
@@ -397,6 +471,17 @@ function App() {
           开始学习 · Empezar
         </button>
 
+        <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
+          width: "100%", padding: "14px 0", borderRadius: 16, marginTop: 10,
+          border: "2px solid rgba(0,131,143,0.5)",
+          background: buildableCards.length === 0 ? "transparent" : "rgba(0,131,143,0.15)",
+          color: buildableCards.length === 0 ? "#555" : "#4DD0E1",
+          fontSize: 15, fontWeight: "bold", cursor: buildableCards.length === 0 ? "not-allowed" : "pointer",
+          fontFamily: "sans-serif"
+        }}>
+          ✏️ Construir frases ({buildableCards.length} disponibles)
+        </button>
+
         <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 18, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
           Reiniciar progreso guardado
         </p>
@@ -443,6 +528,146 @@ function App() {
       </div>
     </div>
   );
+
+  if (mode === "buildResults") return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: 400, width: "100%", textAlign: "center" }}>
+        <div style={{ fontSize: 52, marginBottom: 16 }}>✏️</div>
+        <h2 style={{ color: "#4DD0E1", fontSize: 24, marginBottom: 4 }}>¡Ronda de frases completada!</h2>
+        <p style={{ color: "#FFD09B", marginBottom: 32, fontSize: 14 }}>{buildDeck.length} frases construidas</p>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 32 }}>
+          <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 14, padding: "16px 8px" }}>
+            <div style={{ fontSize: 28, fontWeight: "bold", color: "#4CAF50" }}>{buildStats.correct}</div>
+            <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>✅ A la primera</div>
+          </div>
+          <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 14, padding: "16px 8px" }}>
+            <div style={{ fontSize: 28, fontWeight: "bold", color: "#F44336" }}>{buildStats.wrong}</div>
+            <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>❌ Con errores</div>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button onClick={startBuild} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #00838F, #4DD0E1)", color: "white", fontSize: 15, fontWeight: "bold", cursor: "pointer" }}>
+            🔀 Otra ronda
+          </button>
+          <button onClick={() => setMode("menu")} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "transparent", color: "#888", fontSize: 14, cursor: "pointer" }}>
+            ← Menú principal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Modo: Construir frases
+  if (mode === "build") {
+    if (!buildCard) return null;
+    const color2 = UNIT_COLORS[buildCard.unit] || UNIT_COLORS[1];
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
+        <div style={{ maxWidth: 480, width: "100%" }}>
+
+          {/* Top bar */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Menú</button>
+            <span style={{ color: "#FFD09B", fontSize: 13 }}>{buildIdx + 1} / {buildDeck.length}</span>
+            <span style={{ color: color2.accent, fontSize: 12, background: "rgba(255,255,255,0.1)", padding: "3px 10px", borderRadius: 20, fontWeight: "bold" }}>
+              {buildCard.unit <= 10 ? buildCard.unitName : `L2 · U${buildCard.unit - 12}`}
+            </span>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 4, height: 5, marginBottom: 20, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(buildIdx / buildDeck.length) * 100}%`, background: "linear-gradient(90deg, #00838F, #4DD0E1)", borderRadius: 4, transition: "width 0.4s" }} />
+          </div>
+
+          {/* Prompt */}
+          <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 16, padding: "16px 18px", marginBottom: 16, textAlign: "center" }}>
+            <p style={{ color: "#4DD0E1", fontSize: 11, margin: "0 0 8px 0", letterSpacing: 1 }}>ARMA ESTA FRASE EN CHINO</p>
+            <p style={{ color: "white", fontSize: 18, margin: 0, lineHeight: 1.4 }}>{buildCard.es}</p>
+          </div>
+
+          {/* Answer area */}
+          <div style={{
+            minHeight: 70, background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: 14, marginBottom: 16,
+            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center",
+            border: `2px solid ${buildResult === "correct" ? "#4CAF50" : buildResult === "wrong" ? "#F44336" : "rgba(255,255,255,0.15)"}`,
+            transition: "border-color 0.3s"
+          }}>
+            {answer.length === 0 && <span style={{ color: "#555", fontSize: 13 }}>Toca las fichas de abajo en orden</span>}
+            {answer.map(tile => (
+              <button key={tile.uid} onClick={() => tapAnswerTile(tile)} style={{
+                fontSize: 26, padding: "8px 14px", borderRadius: 10, border: "none",
+                background: buildResult === "correct" ? "rgba(76,175,80,0.25)" : "rgba(77,208,225,0.15)",
+                color: buildResult === "correct" ? "#4CAF50" : "#4DD0E1",
+                cursor: buildResult === "correct" ? "default" : "pointer", fontFamily: "sans-serif"
+              }} disabled={buildResult === "correct"}>
+                {tile.ch}
+              </button>
+            ))}
+          </div>
+
+          {/* Feedback message */}
+          {buildResult === "correct" && (
+            <p style={{ textAlign: "center", color: "#4CAF50", fontSize: 15, fontWeight: "bold", marginBottom: 12 }}>✅ ¡Correcto!</p>
+          )}
+          {buildResult === "wrong" && (
+            <p style={{ textAlign: "center", color: "#F44336", fontSize: 14, marginBottom: 12 }}>❌ Casi — revisa el orden y ajusta las fichas</p>
+          )}
+
+          {/* Tile pool */}
+          <div style={{
+            minHeight: 70, borderRadius: 16, padding: 14, marginBottom: 16,
+            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center"
+          }}>
+            {pool.map(tile => (
+              <button key={tile.uid} onClick={() => tapPoolTile(tile)} style={{
+                fontSize: 26, padding: "8px 14px", borderRadius: 10,
+                border: `2px solid ${color2.accent}66`, background: color2.bg,
+                color: "#1a0a00", cursor: "pointer", fontFamily: "sans-serif", fontWeight: "bold"
+              }}>
+                {tile.ch}
+              </button>
+            ))}
+          </div>
+
+          {/* Answer reveal */}
+          {showBuildAnswer && (
+            <div style={{ background: `${color2.accent}15`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, textAlign: "center" }}>
+              <p style={{ fontSize: 22, color: color2.accent, fontWeight: "bold", margin: "0 0 4px 0" }}>{buildCard.zh}</p>
+              <p style={{ fontSize: 14, color: "#999", margin: "0 0 4px 0", fontStyle: "italic" }}>{buildCard.py}</p>
+              <p style={{ fontSize: 13, color: "#ccc", margin: 0 }}>{buildCard.es}</p>
+            </div>
+          )}
+
+          {/* Bottom actions */}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => speak(buildCard.zh)} style={{
+              padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+            }}>
+              🔊
+            </button>
+            {!showBuildAnswer ? (
+              <button onClick={() => setShowBuildAnswer(true)} style={{
+                flex: 1, padding: "12px 0", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+              }}>
+                🙈 Ver respuesta
+              </button>
+            ) : (
+              <button onClick={nextBuildCard} style={{
+                flex: 1, padding: "12px 0", borderRadius: 14, border: "none",
+                background: "linear-gradient(135deg, #00838F, #4DD0E1)", color: "white", fontSize: 14, fontWeight: "bold", cursor: "pointer"
+              }}>
+                Siguiente →
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Study mode
   return (
