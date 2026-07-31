@@ -160,6 +160,21 @@ function isGoodForBuilder(card) {
   return true;
 }
 
+// ---------- Modo: Patrones gramaticales ----------
+// Organiza las 📐 tarjetas de gramática por TIPO de patrón, cruzando unidades.
+// Si se agregan más tarjetas 📐 en el futuro, hay que sumar sus IDs aquí.
+const PATTERN_CATEGORIES = [
+  { key: "medidas", icon: "📏", label: "Medidas y cantidades", color: "#FF6B35", ids: [40,41,250,251,181,182,183,254,162,163] },
+  { key: "posesion", icon: "🔑", label: "的 y posesión", color: "#7B1FA2", ids: [157,158,247,248,252] },
+  { key: "tiempo", icon: "⏰", label: "Tiempo", color: "#00695C", ids: [42,125,126,127,180] },
+  { key: "poder", icon: "🚦", label: "Poder y permiso", color: "#1565C0", ids: [124,164,253,286] },
+  { key: "ubicacion", icon: "🧭", label: "Ubicación y dirección", color: "#2E7D32", ids: [173,174,175,223,224,225,226,269,270,271,272,222] },
+  { key: "preguntas", icon: "❓", label: "Preguntas especiales", color: "#C62828", ids: [170,171,172,176,268,273,166] },
+  { key: "matices", icon: "🔀", label: "Palabras que se confunden", color: "#AD1457", ids: [184,185,227,228,229,249,285,255] },
+  { key: "estructura", icon: "✍️", label: "Estructura de oración", color: "#558B2F", ids: [165,169,298,299,312,313] },
+  { key: "tonos", icon: "🔤", label: "Tonos y radicales", color: "#5E35B1", ids: [159,160,161,130,167,168,177,178,179,230,256,257] },
+];
+
 function App() {
   const [selectedUnits, setSelectedUnits] = useState([1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19]);
   const [mode, setMode] = useState("menu");
@@ -188,6 +203,25 @@ function App() {
       setProgress({});
       saveProgress({});
     }
+  };
+
+  // ---------- Modo: Patrones gramaticales ----------
+  const [selectedCategory, setSelectedCategory] = useState(null);
+
+  const openCategory = (cat) => {
+    setSelectedCategory(cat);
+    setMode("patternDetail");
+  };
+
+  const practiceCategory = (cat) => {
+    const cards = ALL_CARDS.filter(c => cat.ids.includes(c.id));
+    const shuffled = [...cards].sort(() => Math.random() - 0.5);
+    setDeck(shuffled);
+    setCurrentIdx(0);
+    setFlipped(false);
+    setShowExample(false);
+    setRatings({});
+    setMode("study");
   };
 
   const startReviewToday = () => {
@@ -556,6 +590,14 @@ function App() {
           </button>
         </div>
 
+        <button onClick={() => setMode("patterns")} style={{
+          width: "100%", padding: "14px 0", borderRadius: 16, marginTop: 12,
+          border: "2px solid rgba(255,157,61,0.4)", background: "rgba(255,157,61,0.08)",
+          color: "#FF9D3D", fontSize: 15, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
+        }}>
+          📐 Patrones gramaticales (69)
+        </button>
+
         <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 18, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
           Reiniciar progreso guardado
         </p>
@@ -602,6 +644,86 @@ function App() {
       </div>
     </div>
   );
+
+  // Modo: lista de categorías de patrones
+  if (mode === "patterns") return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: 480, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Menú</button>
+          <span style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold" }}>📐 Patrones gramaticales</span>
+          <span style={{ width: 40 }} />
+        </div>
+        <p style={{ color: "#FFD09B", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 1.5 }}>
+          Las estructuras se repiten en muchas unidades. Aquí están agrupadas por tipo, sin importar en qué semana las viste.
+        </p>
+
+        {PATTERN_CATEGORIES.map(cat => (
+          <button key={cat.key} onClick={() => openCategory(cat)} style={{
+            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "16px 18px", borderRadius: 16, marginBottom: 10,
+            border: `2px solid ${cat.color}55`, background: `${cat.color}15`,
+            cursor: "pointer", textAlign: "left"
+          }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 24 }}>{cat.icon}</span>
+              <span style={{ color: "white", fontSize: 15, fontWeight: "bold" }}>{cat.label}</span>
+            </span>
+            <span style={{ color: cat.color, fontSize: 13, fontWeight: "bold" }}>{cat.ids.length} →</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+
+  // Modo: detalle de una categoría — referencia + practicar
+  if (mode === "patternDetail" && selectedCategory) {
+    const cat = selectedCategory;
+    const cards = ALL_CARDS.filter(c => cat.ids.includes(c.id));
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
+        <div style={{ maxWidth: 480, width: "100%" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <button onClick={() => setMode("patterns")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Categorías</button>
+            <span style={{ color: cat.color, fontSize: 13, fontWeight: "bold" }}>{cards.length} patrones</span>
+          </div>
+          <h2 style={{ color: "white", fontSize: 20, textAlign: "center", margin: "6px 0 20px 0" }}>{cat.icon} {cat.label}</h2>
+
+          {cards.map(c => (
+            <div key={c.id} style={{
+              background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: "14px 16px", marginBottom: 10,
+              borderLeft: `4px solid ${cat.color}`
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                <div>
+                  <p style={{ color: "white", fontSize: 17, fontWeight: "bold", margin: "0 0 2px 0" }}>{c.zh}</p>
+                  <p style={{ color: "#999", fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0" }}>{c.py}</p>
+                </div>
+                <button onClick={() => speak(c.zh.replace(/[❌✅]/g, ""))} style={{
+                  background: "none", border: `1px solid ${cat.color}66`, borderRadius: 20,
+                  padding: "3px 8px", color: cat.color, fontSize: 12, cursor: "pointer", flexShrink: 0
+                }}>🔊</button>
+              </div>
+              <p style={{ color: "#ccc", fontSize: 13, margin: "0 0 8px 0", lineHeight: 1.4 }}>{c.es}</p>
+              <div style={{ background: `${cat.color}12`, borderRadius: 10, padding: "8px 12px" }}>
+                <p style={{ color: cat.color, fontSize: 13, margin: "0 0 2px 0" }}>{c.exZh}</p>
+                <p style={{ color: "#888", fontSize: 11, margin: "0 0 2px 0", fontStyle: "italic" }}>{c.exPy}</p>
+                <p style={{ color: "#aaa", fontSize: 12, margin: 0 }}>{c.exEs}</p>
+              </div>
+            </div>
+          ))}
+
+          <button onClick={() => practiceCategory(cat)} style={{
+            width: "100%", padding: "16px 0", borderRadius: 16, border: "none", marginTop: 12,
+            background: `linear-gradient(135deg, ${cat.color}, ${cat.color}cc)`, color: "white",
+            fontSize: 15, fontWeight: "bold", cursor: "pointer"
+          }}>
+            🎯 Practicar estos patrones
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (mode === "buildResults") return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "sans-serif" }}>
