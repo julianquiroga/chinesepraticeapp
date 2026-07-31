@@ -150,6 +150,59 @@ function isDue(cardId, progress) {
   return p.nextReview <= Date.now();
 }
 
+// ---------- Preferencias guardadas (unidades, dirección, audio, pinyin, nivel) ----------
+const PREFS_KEY = "gwc_prefs_v1";
+const DEFAULT_PREFS = {
+  selectedUnits: [1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19],
+  studyDir: "es→zh",
+  showPinyin: true,
+  autoPlay: true,
+  builderLevel: "easy",
+};
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    return raw ? { ...DEFAULT_PREFS, ...JSON.parse(raw) } : { ...DEFAULT_PREFS };
+  } catch (e) {
+    return { ...DEFAULT_PREFS };
+  }
+}
+
+function savePrefs(prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) { /* falla en silencio */ }
+}
+
+// ---------- Racha de días seguidos ----------
+const STREAK_KEY = "gwc_streak_v1";
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+}
+
+function loadStreak() {
+  try {
+    const raw = localStorage.getItem(STREAK_KEY);
+    return raw ? JSON.parse(raw) : { lastDate: null, current: 0, longest: 0 };
+  } catch (e) {
+    return { lastDate: null, current: 0, longest: 0 };
+  }
+}
+
+function recordActivity(streak, setStreak) {
+  const today = todayStr();
+  if (streak.lastDate === today) return; // ya contado hoy
+  const yesterday = new Date(Date.now() - DAY_MS);
+  const yStr = yesterday.getFullYear() + "-" + (yesterday.getMonth() + 1) + "-" + yesterday.getDate();
+  const newCurrent = streak.lastDate === yStr ? streak.current + 1 : 1;
+  const updated = { lastDate: today, current: newCurrent, longest: Math.max(newCurrent, streak.longest) };
+  localStorage.setItem(STREAK_KEY, JSON.stringify(updated));
+  setStreak(updated);
+}
+
 // ---------- Modo: Construir frases ----------
 function isGoodForBuilder(card) {
   const zh = card.zh;
@@ -175,20 +228,51 @@ const PATTERN_CATEGORIES = [
   { key: "tonos", icon: "🔤", label: "Tonos y radicales", color: "#5E35B1", ids: [159,160,161,130,167,168,177,178,179,230,256,257] },
 ];
 
+function ProgressRing({ pct, size = 84, color = "#FF9D3D" }) {
+  const stroke = 8;
+  const radius = (size - stroke) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (Math.min(pct, 100) / 100) * circumference;
+  return (
+    <div style={{ position: "relative", width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+        <circle cx={size/2} cy={size/2} r={radius} stroke="rgba(255,255,255,0.1)" strokeWidth={stroke} fill="none" />
+        <circle cx={size/2} cy={size/2} r={radius} stroke={color} strokeWidth={stroke} fill="none"
+          strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
+          style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+      </svg>
+      <div style={{
+        position: "absolute", top: 0, left: 0, width: size, height: size,
+        display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column"
+      }}>
+        <span style={{ color: "white", fontSize: 20, fontWeight: "bold", fontFamily: "sans-serif" }}>{pct}%</span>
+        <span style={{ color: "#999", fontSize: 9, fontFamily: "sans-serif" }}>dominado</span>
+      </div>
+    </div>
+  );
+}
+
 function App() {
-  const [selectedUnits, setSelectedUnits] = useState([1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19]);
+  const initialPrefs = loadPrefs();
+  const [selectedUnits, setSelectedUnits] = useState(initialPrefs.selectedUnits);
   const [mode, setMode] = useState("menu");
   const [deck, setDeck] = useState([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [showPinyin, setShowPinyin] = useState(true);
+  const [showPinyin, setShowPinyin] = useState(initialPrefs.showPinyin);
   const [showExample, setShowExample] = useState(false);
   const [ratings, setRatings] = useState({});
-  const [studyDir, setStudyDir] = useState("es→zh");
+  const [studyDir, setStudyDir] = useState(initialPrefs.studyDir);
   const [animating, setAnimating] = useState(false);
-  const [autoPlay, setAutoPlay] = useState(true);
+  const [autoPlay, setAutoPlay] = useState(initialPrefs.autoPlay);
   const [progress, setProgress] = useState(() => loadProgress());
+  const [streak, setStreak] = useState(() => loadStreak());
   const { speak, speaking, voiceReady } = useSpeech();
+
+  // Guarda preferencias automáticamente cuando cambian
+  useEffect(() => {
+    savePrefs({ selectedUnits, studyDir, showPinyin, autoPlay, builderLevel });
+  }, [selectedUnits, studyDir, showPinyin, autoPlay, builderLevel]);
 
   const units = [...new Set(ALL_CARDS.map(c => c.unit))].sort((a,b)=>a-b);
 
@@ -197,6 +281,15 @@ function App() {
   const masteredCount = Object.values(progress).filter(p => p.box >= MAX_BOX).length;
   const learningCount = Object.values(progress).filter(p => p.box < MAX_BOX).length;
   const newCount = ALL_CARDS.length - Object.keys(progress).length;
+  const masteredPct = Math.round((masteredCount / ALL_CARDS.length) * 100);
+  const hasHistory = Object.keys(progress).length > 0;
+
+  const unitMastery = (unitNum) => {
+    const unitCards = ALL_CARDS.filter(c => c.unit === unitNum);
+    if (unitCards.length === 0) return 0;
+    const mastered = unitCards.filter(c => progress[c.id] && progress[c.id].box >= MAX_BOX).length;
+    return Math.round((mastered / unitCards.length) * 100);
+  };
 
   const resetProgress = () => {
     if (window.confirm("¿Seguro que quieres borrar todo tu progreso guardado? Esto no se puede deshacer.")) {
@@ -235,7 +328,7 @@ function App() {
   };
 
   // ---------- Modo: Construir frases ----------
-  const [builderLevel, setBuilderLevel] = useState("easy"); // easy | medium | hard
+  const [builderLevel, setBuilderLevel] = useState(initialPrefs.builderLevel); // easy | medium | hard
   const [buildDeck, setBuildDeck] = useState([]);
   const [buildIdx, setBuildIdx] = useState(0);
   const [pool, setPool] = useState([]);
@@ -313,6 +406,7 @@ function App() {
 
   const registerResult = (correct) => {
     setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
+    recordActivity(streak, setStreak);
     if (correct) {
       speak(buildCard.zh);
       setTimeout(() => nextBuildCard(), 1200);
@@ -370,6 +464,7 @@ function App() {
       saveProgress(updated);
       return updated;
     });
+    recordActivity(streak, setStreak);
     setAnimating(true);
     window.speechSynthesis.cancel();
     setTimeout(() => {
@@ -408,18 +503,41 @@ function App() {
 
   if (mode === "menu") return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", fontFamily: "'Georgia', serif" }}>
-      <div style={{ maxWidth: 500, width: "100%" }}>
+      <div style={{ maxWidth: 480, width: "100%" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>🏯</div>
-          <h1 style={{ color: "#FF9D3D", fontSize: 28, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>长城汉语</h1>
-          <p style={{ color: "#FFD09B", fontSize: 14, marginTop: 4 }}>Great Wall Chinese · Flashcards</p>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+          <div>
+            <h1 style={{ color: "#FF9D3D", fontSize: 24, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>🏯 长城汉语</h1>
+          </div>
+          <button onClick={() => setMode("settings")} style={{
+            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 12, padding: "8px 12px", color: "#ccc", fontSize: 18, cursor: "pointer"
+          }}>
+            ⚙️
+          </button>
+        </div>
+
+        {/* Racha + progreso general */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, background: "rgba(255,255,255,0.05)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+          <ProgressRing pct={masteredPct} />
+          <div style={{ flex: 1 }}>
+            {streak.current > 0 && (
+              <p style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", margin: "0 0 6px 0", fontFamily: "sans-serif" }}>
+                🔥 {streak.current} {streak.current === 1 ? "día seguido" : "días seguidos"}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "sans-serif", flexWrap: "wrap" }}>
+              <span style={{ color: "#888" }}>🆕 {newCount}</span>
+              <span style={{ color: "#FF9D3D" }}>📖 {learningCount}</span>
+              <span style={{ color: "#4CAF50" }}>⭐ {masteredCount}</span>
+            </div>
+          </div>
         </div>
 
         {/* Repaso de hoy */}
         <div style={{
           background: dueCount > 0 ? "linear-gradient(135deg, #FF6B35, #FF9D3D)" : "rgba(76,175,80,0.12)",
-          borderRadius: 16, padding: 18, marginBottom: 16,
+          borderRadius: 16, padding: 18, marginBottom: 14,
           border: dueCount > 0 ? "none" : "2px solid rgba(76,175,80,0.35)"
         }}>
           {dueCount > 0 ? (
@@ -442,15 +560,83 @@ function App() {
           )}
         </div>
 
-        {/* Estadísticas de progreso */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 18, marginBottom: 20, fontSize: 12, fontFamily: "sans-serif" }}>
-          <span style={{ color: "#888" }}>🆕 {newCount} nuevas</span>
-          <span style={{ color: "#FF9D3D" }}>📖 {learningCount} aprendiendo</span>
-          <span style={{ color: "#4CAF50" }}>⭐ {masteredCount} dominadas</span>
+        {/* Continuar donde quedé */}
+        {hasHistory && (
+          <button onClick={startStudy} disabled={selectedUnits.length === 0} style={{
+            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "14px 18px", borderRadius: 14, marginBottom: 18, border: "1px solid rgba(255,255,255,0.15)",
+            background: "rgba(255,255,255,0.05)", cursor: selectedUnits.length === 0 ? "not-allowed" : "pointer"
+          }}>
+            <span style={{ color: "#ccc", fontSize: 13, fontFamily: "sans-serif" }}>▶️ Continuar estudiando</span>
+            <span style={{ color: "#666", fontSize: 11, fontFamily: "sans-serif" }}>{studyDir === "es→zh" ? "ES→中" : "中→ES"} · {selectedUnits.length} unidades</span>
+          </button>
+        )}
+
+        {/* Navegación principal */}
+        <button onClick={startStudy} disabled={selectedUnits.length === 0} style={{
+          width: "100%", padding: "18px 0", borderRadius: 16, border: "none", marginBottom: 10,
+          background: selectedUnits.length === 0 ? "#444" : "linear-gradient(135deg, #FF6B35, #FF9D3D)",
+          color: "white", fontSize: 17, fontWeight: "bold", cursor: selectedUnits.length === 0 ? "not-allowed" : "pointer",
+          fontFamily: "sans-serif", letterSpacing: 0.5, boxShadow: "0 4px 20px rgba(255,107,53,0.35)"
+        }}>
+          📚 Flashcards · {ALL_CARDS.filter(c => selectedUnits.includes(c.unit)).length} tarjetas
+        </button>
+
+        {/* Selector de nivel para Construir frases */}
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 12, marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            {[
+              { v: "easy", label: "🟢 Fácil" },
+              { v: "medium", label: "🟡 Medio" },
+              { v: "hard", label: "🔴 听写" },
+            ].map(lv => (
+              <button key={lv.v} onClick={() => setBuilderLevel(lv.v)} style={{
+                flex: 1, padding: "7px 0", borderRadius: 10, border: `2px solid ${builderLevel === lv.v ? "#4DD0E1" : "rgba(255,255,255,0.15)"}`,
+                background: builderLevel === lv.v ? "rgba(77,208,225,0.15)" : "transparent",
+                color: builderLevel === lv.v ? "#4DD0E1" : "#888", fontSize: 11, fontWeight: builderLevel === lv.v ? "bold" : "normal",
+                cursor: "pointer", fontFamily: "sans-serif"
+              }}>
+                {lv.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
+            width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+            background: buildableCards.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
+            color: "white", fontSize: 15, fontWeight: "bold",
+            cursor: buildableCards.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
+          }}>
+            ✏️ Construir frases · {buildableCards.length} disponibles
+          </button>
+        </div>
+
+        <button onClick={() => setMode("patterns")} style={{
+          width: "100%", padding: "16px 0", borderRadius: 16, marginBottom: 18,
+          border: "2px solid rgba(255,157,61,0.4)", background: "rgba(255,157,61,0.08)",
+          color: "#FF9D3D", fontSize: 15, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
+        }}>
+          📐 Patrones gramaticales · {PATTERN_CATEGORIES.reduce((sum, c) => sum + c.ids.length, 0)}
+        </button>
+
+        <p onClick={() => setMode("settings")} style={{ textAlign: "center", color: "#666", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif" }}>
+          ⚙️ Unidades, dirección, audio y más
+        </p>
+      </div>
+    </div>
+  );
+
+  // Pantalla de opciones: dirección, audio, pinyin, selector de unidades, reiniciar progreso
+  if (mode === "settings") return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", fontFamily: "'Georgia', serif" }}>
+      <div style={{ maxWidth: 500, width: "100%" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "sans-serif" }}>← Inicio</button>
+          <span style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", fontFamily: "sans-serif" }}>⚙️ Opciones</span>
+          <span style={{ width: 50 }} />
         </div>
 
         {/* Direction */}
-        <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+        <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 16, marginBottom: 12 }}>
           <p style={{ color: "#FFD09B", fontSize: 13, margin: "0 0 10px 0", fontFamily: "sans-serif" }}>Dirección de estudio</p>
           <div style={{ display: "flex", gap: 8 }}>
             {["es→zh", "zh→es"].map(d => (
@@ -487,8 +673,8 @@ function App() {
         ))}
         <div style={{ marginBottom: 6 }} />
 
-        {/* Unit selector */}
-        <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 16, marginBottom: 24 }}>
+        {/* Unit selector con % de dominio */}
+        <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: 16, padding: 16, marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <p style={{ color: "#FFD09B", fontSize: 13, margin: 0, fontFamily: "sans-serif" }}>Seleccionar unidades</p>
             <div style={{ display: "flex", gap: 8 }}>
@@ -503,7 +689,7 @@ function App() {
             {units.filter(u => u >= 1 && u <= 10).map(u => {
               const uc = UNIT_COLORS[u];
               const sel = selectedUnits.includes(u);
-              const unitCards = ALL_CARDS.filter(c => c.unit === u);
+              const pct = unitMastery(u);
               return (
                 <button key={u} onClick={() => toggleUnit(u)} style={{
                   padding: "8px 4px", borderRadius: 10, border: `2px solid ${sel ? uc.accent : "rgba(255,255,255,0.1)"}`,
@@ -513,7 +699,7 @@ function App() {
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 2
                 }}>
                   <span style={{ fontSize: 12 }}>U{u}</span>
-                  <span style={{ fontSize: 9, opacity: 0.8 }}>{unitCards.length}f</span>
+                  <span style={{ fontSize: 9, opacity: 0.85 }}>{pct > 0 ? `⭐${pct}%` : "—"}</span>
                 </button>
               );
             })}
@@ -525,8 +711,8 @@ function App() {
             {units.filter(u => u > 12 && u !== 30).map(u => {
               const uc = UNIT_COLORS[u];
               const sel = selectedUnits.includes(u);
-              const unitCards = ALL_CARDS.filter(c => c.unit === u);
               const l2num = u - 12;
+              const pct = unitMastery(u);
               return (
                 <button key={u} onClick={() => toggleUnit(u)} style={{
                   padding: "8px 4px", borderRadius: 10, border: `2px solid ${sel ? uc.accent : "rgba(255,255,255,0.1)"}`,
@@ -536,7 +722,7 @@ function App() {
                   display: "flex", flexDirection: "column", alignItems: "center", gap: 2
                 }}>
                   <span style={{ fontSize: 12 }}>U{l2num}</span>
-                  <span style={{ fontSize: 9, opacity: 0.8 }}>{unitCards.length}f</span>
+                  <span style={{ fontSize: 9, opacity: 0.85 }}>{pct > 0 ? `⭐${pct}%` : "—"}</span>
                 </button>
               );
             })}
@@ -547,58 +733,7 @@ function App() {
           </p>
         </div>
 
-        <button onClick={startStudy} disabled={selectedUnits.length === 0} style={{
-          width: "100%", padding: "16px 0", borderRadius: 16, border: "none",
-          background: selectedUnits.length === 0 ? "#444" : "linear-gradient(135deg, #FF6B35, #FF9D3D)",
-          color: "white", fontSize: 18, fontWeight: "bold", cursor: selectedUnits.length === 0 ? "not-allowed" : "pointer",
-          fontFamily: "sans-serif", letterSpacing: 1, boxShadow: "0 4px 20px rgba(255,107,53,0.4)"
-        }}>
-          开始学习 · Empezar
-        </button>
-
-        {/* Selector de nivel para Construir frases */}
-        <div style={{ marginTop: 14, background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: 12 }}>
-          <p style={{ color: "#4DD0E1", fontSize: 12, margin: "0 0 8px 0", fontFamily: "sans-serif", textAlign: "center" }}>Nivel para construir frases</p>
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            {[
-              { v: "easy", label: "🟢 Fácil" },
-              { v: "medium", label: "🟡 Medio" },
-              { v: "hard", label: "🔴 听写" },
-            ].map(lv => (
-              <button key={lv.v} onClick={() => setBuilderLevel(lv.v)} style={{
-                flex: 1, padding: "8px 0", borderRadius: 10, border: `2px solid ${builderLevel === lv.v ? "#4DD0E1" : "rgba(255,255,255,0.15)"}`,
-                background: builderLevel === lv.v ? "rgba(77,208,225,0.15)" : "transparent",
-                color: builderLevel === lv.v ? "#4DD0E1" : "#888", fontSize: 12, fontWeight: builderLevel === lv.v ? "bold" : "normal",
-                cursor: "pointer", fontFamily: "sans-serif"
-              }}>
-                {lv.label}
-              </button>
-            ))}
-          </div>
-          <p style={{ color: "#888", fontSize: 11, margin: "0 0 10px 0", fontFamily: "sans-serif", textAlign: "center", lineHeight: 1.4 }}>
-            {builderLevel === "easy" && "Ordena las fichas exactas de la frase."}
-            {builderLevel === "medium" && "Ordena las fichas, pero hay 3 de más que no pertenecen."}
-            {builderLevel === "hard" && "Escribe la frase completa de memoria, en caracteres chinos — como el 听写 (tīngxiě) que se practica en las escuelas."}
-          </p>
-          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
-            width: "100%", padding: "12px 0", borderRadius: 12, border: "none",
-            background: buildableCards.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
-            color: "white", fontSize: 14, fontWeight: "bold",
-            cursor: buildableCards.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
-          }}>
-            ✏️ Construir frases ({buildableCards.length} disponibles)
-          </button>
-        </div>
-
-        <button onClick={() => setMode("patterns")} style={{
-          width: "100%", padding: "14px 0", borderRadius: 16, marginTop: 12,
-          border: "2px solid rgba(255,157,61,0.4)", background: "rgba(255,157,61,0.08)",
-          color: "#FF9D3D", fontSize: 15, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
-        }}>
-          📐 Patrones gramaticales ({PATTERN_CATEGORIES.reduce((sum, c) => sum + c.ids.length, 0)})
-        </button>
-
-        <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 18, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
+        <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 8, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
           Reiniciar progreso guardado
         </p>
       </div>
@@ -626,15 +761,23 @@ function App() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {dueCount > 0 && (
+            <button onClick={startReviewToday} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #FF6B35, #FF9D3D)", color: "white", fontSize: 15, fontWeight: "bold", cursor: "pointer" }}>
+              📅 Seguir con el repaso de hoy ({dueCount} pendientes)
+            </button>
+          )}
           <button onClick={() => {
             const dontKnow = deck.filter(c => ratings[c.id] === RATING.dontKnow || ratings[c.id] === RATING.almost);
             if (dontKnow.length === 0) { startStudy(); return; }
             setDeck(dontKnow.sort(() => Math.random() - 0.5));
             setCurrentIdx(0); setFlipped(false); setRatings({}); setMode("study");
-          }} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #FF6B35, #FF9D3D)", color: "white", fontSize: 15, fontWeight: "bold", cursor: "pointer" }}>
+          }} style={{ padding: "14px 0", borderRadius: 14, border: dueCount > 0 ? "2px solid rgba(255,107,53,0.4)" : "none", background: dueCount > 0 ? "transparent" : "linear-gradient(135deg, #FF6B35, #FF9D3D)", color: dueCount > 0 ? "#FF9D3D" : "white", fontSize: 15, fontWeight: "bold", cursor: "pointer" }}>
             🔄 Repasar las que me fallaron
           </button>
-          <button onClick={startStudy} style={{ padding: "14px 0", borderRadius: 14, border: "2px solid rgba(255,107,53,0.4)", background: "transparent", color: "#FF9D3D", fontSize: 15, cursor: "pointer" }}>
+          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{ padding: "14px 0", borderRadius: 14, border: "2px solid rgba(0,131,143,0.4)", background: "transparent", color: buildableCards.length === 0 ? "#555" : "#4DD0E1", fontSize: 14, cursor: buildableCards.length === 0 ? "not-allowed" : "pointer" }}>
+            ✏️ Construir frases con estas unidades
+          </button>
+          <button onClick={startStudy} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "transparent", color: "#999", fontSize: 13, cursor: "pointer" }}>
             🔀 Nueva ronda completa
           </button>
           <button onClick={() => setMode("menu")} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "transparent", color: "#888", fontSize: 14, cursor: "pointer" }}>
@@ -747,6 +890,14 @@ function App() {
           <button onClick={startBuild} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "linear-gradient(135deg, #00838F, #4DD0E1)", color: "white", fontSize: 15, fontWeight: "bold", cursor: "pointer" }}>
             🔀 Otra ronda
           </button>
+          <button onClick={startStudy} style={{ padding: "14px 0", borderRadius: 14, border: "2px solid rgba(255,107,53,0.4)", background: "transparent", color: "#FF9D3D", fontSize: 14, cursor: "pointer" }}>
+            📚 Repasar como flashcards
+          </button>
+          {dueCount > 0 && (
+            <button onClick={startReviewToday} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "transparent", color: "#999", fontSize: 13, cursor: "pointer" }}>
+              📅 Tienes {dueCount} pendientes de repaso hoy
+            </button>
+          )}
           <button onClick={() => setMode("menu")} style={{ padding: "14px 0", borderRadius: 14, border: "none", background: "transparent", color: "#888", fontSize: 14, cursor: "pointer" }}>
             ← Menú principal
           </button>
