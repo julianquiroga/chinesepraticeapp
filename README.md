@@ -1,1 +1,1 @@
-# chinesepraticeapp
+# chinesepracticeapp
