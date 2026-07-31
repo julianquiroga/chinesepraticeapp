@@ -111,6 +111,45 @@ function ExampleBox({ card, color, speak, speaking }) {
 
 const RATING = { know: "know", almost: "almost", dontKnow: "dontKnow" };
 
+// ---------- Repetición espaciada + progreso guardado ----------
+const STORAGE_KEY = "gwc_srs_progress_v1";
+const BOX_INTERVAL_DAYS = [1, 2, 4, 7, 14, 30]; // índice = número de caja
+const MAX_BOX = BOX_INTERVAL_DAYS.length - 1;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveProgress(progress) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  } catch (e) {
+    // localStorage lleno o deshabilitado — falla en silencio, no rompe la app
+  }
+}
+
+function computeNextEntry(prevEntry, rating) {
+  const prevBox = prevEntry ? prevEntry.box : -1;
+  let box;
+  if (rating === RATING.know) box = Math.min(prevBox + 1, MAX_BOX);
+  else if (rating === RATING.almost) box = Math.max(prevBox, 0);
+  else box = 0;
+  const days = BOX_INTERVAL_DAYS[box];
+  return { box, nextReview: Date.now() + days * DAY_MS, lastReviewed: Date.now() };
+}
+
+function isDue(cardId, progress) {
+  const p = progress[cardId];
+  if (!p) return true; // nunca estudiada = pendiente
+  return p.nextReview <= Date.now();
+}
+
 function App() {
   const [selectedUnits, setSelectedUnits] = useState([1,2,3,4,5,6,7,8,9,10,13,14,15,16,17,18,19]);
   const [mode, setMode] = useState("menu");
@@ -123,9 +162,33 @@ function App() {
   const [studyDir, setStudyDir] = useState("es→zh");
   const [animating, setAnimating] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
+  const [progress, setProgress] = useState(() => loadProgress());
   const { speak, speaking, voiceReady } = useSpeech();
 
   const units = [...new Set(ALL_CARDS.map(c => c.unit))].sort((a,b)=>a-b);
+
+  const dueCards = ALL_CARDS.filter(c => isDue(c.id, progress));
+  const dueCount = dueCards.length;
+  const masteredCount = Object.values(progress).filter(p => p.box >= MAX_BOX).length;
+  const learningCount = Object.values(progress).filter(p => p.box < MAX_BOX).length;
+  const newCount = ALL_CARDS.length - Object.keys(progress).length;
+
+  const resetProgress = () => {
+    if (window.confirm("¿Seguro que quieres borrar todo tu progreso guardado? Esto no se puede deshacer.")) {
+      setProgress({});
+      saveProgress({});
+    }
+  };
+
+  const startReviewToday = () => {
+    const shuffled = [...dueCards].sort(() => Math.random() - 0.5);
+    setDeck(shuffled);
+    setCurrentIdx(0);
+    setFlipped(false);
+    setShowExample(false);
+    setRatings({});
+    setMode("study");
+  };
 
   const startStudy = () => {
     const filtered = ALL_CARDS.filter(c => selectedUnits.includes(c.unit));
@@ -143,6 +206,11 @@ function App() {
 
   const rate = (r) => {
     setRatings(prev => ({ ...prev, [card.id]: r }));
+    setProgress(prev => {
+      const updated = { ...prev, [card.id]: computeNextEntry(prev[card.id], r) };
+      saveProgress(updated);
+      return updated;
+    });
     setAnimating(true);
     window.speechSynthesis.cancel();
     setTimeout(() => {
@@ -187,6 +255,39 @@ function App() {
           <div style={{ fontSize: 48, marginBottom: 8 }}>🏯</div>
           <h1 style={{ color: "#FF9D3D", fontSize: 28, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>长城汉语</h1>
           <p style={{ color: "#FFD09B", fontSize: 14, marginTop: 4 }}>Great Wall Chinese · Flashcards</p>
+        </div>
+
+        {/* Repaso de hoy */}
+        <div style={{
+          background: dueCount > 0 ? "linear-gradient(135deg, #FF6B35, #FF9D3D)" : "rgba(76,175,80,0.12)",
+          borderRadius: 16, padding: 18, marginBottom: 16,
+          border: dueCount > 0 ? "none" : "2px solid rgba(76,175,80,0.35)"
+        }}>
+          {dueCount > 0 ? (
+            <>
+              <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 4px 0", fontFamily: "sans-serif" }}>📅 Repaso de hoy</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "white", fontSize: 22, fontWeight: "bold", fontFamily: "sans-serif" }}>{dueCount} tarjetas</span>
+                <button onClick={startReviewToday} style={{
+                  background: "white", color: "#FF6B35", border: "none", borderRadius: 12,
+                  padding: "10px 20px", fontSize: 14, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
+                }}>
+                  Repasar →
+                </button>
+              </div>
+            </>
+          ) : (
+            <p style={{ color: "#4CAF50", fontSize: 14, margin: 0, fontFamily: "sans-serif", textAlign: "center" }}>
+              🎉 ¡Ya repasaste todo por hoy! Vuelve mañana.
+            </p>
+          )}
+        </div>
+
+        {/* Estadísticas de progreso */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 18, marginBottom: 20, fontSize: 12, fontFamily: "sans-serif" }}>
+          <span style={{ color: "#888" }}>🆕 {newCount} nuevas</span>
+          <span style={{ color: "#FF9D3D" }}>📖 {learningCount} aprendiendo</span>
+          <span style={{ color: "#4CAF50" }}>⭐ {masteredCount} dominadas</span>
         </div>
 
         {/* Direction */}
@@ -295,6 +396,10 @@ function App() {
         }}>
           开始学习 · Empezar
         </button>
+
+        <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 18, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
+          Reiniciar progreso guardado
+        </p>
       </div>
     </div>
   );
