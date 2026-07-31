@@ -201,6 +201,7 @@ function App() {
   };
 
   // ---------- Modo: Construir frases ----------
+  const [builderLevel, setBuilderLevel] = useState("easy"); // easy | medium | hard
   const [buildDeck, setBuildDeck] = useState([]);
   const [buildIdx, setBuildIdx] = useState(0);
   const [pool, setPool] = useState([]);
@@ -208,16 +209,42 @@ function App() {
   const [buildResult, setBuildResult] = useState(null);
   const [buildStats, setBuildStats] = useState({ correct: 0, wrong: 0 });
   const [showBuildAnswer, setShowBuildAnswer] = useState(false);
+  const [typedAnswer, setTypedAnswer] = useState("");
+  const [hardResult, setHardResult] = useState(null);
+  const [hardDiff, setHardDiff] = useState([]);
 
   const buildableCards = ALL_CARDS.filter(c => selectedUnits.includes(c.unit) && isGoodForBuilder(c));
   const buildCard = buildDeck[buildIdx];
 
+  const getDistractorChars = (correctChars, count) => {
+    const pool2 = new Set();
+    buildableCards.forEach(c => Array.from(c.zh).forEach(ch => {
+      if (!/[，。！？、；：""''\?\!]/.test(ch)) pool2.add(ch);
+    }));
+    correctChars.forEach(ch => pool2.delete(ch));
+    const arr = [...pool2];
+    const picked = [];
+    for (let i = 0; i < count && arr.length > 0; i++) {
+      const idx = Math.floor(Math.random() * arr.length);
+      picked.push(arr.splice(idx, 1)[0]);
+    }
+    return picked;
+  };
+
   const shuffleTilesFor = (c) => {
-    const chars = Array.from(c.zh).map((ch, i) => ({ ch, uid: c.id + "-" + i + "-" + Math.random() }));
-    setPool([...chars].sort(() => Math.random() - 0.5));
+    const correctChars = Array.from(c.zh);
+    let tiles = correctChars.map((ch, i) => ({ ch, uid: c.id + "-" + i + "-" + Math.random() }));
+    if (builderLevel === "medium") {
+      const distractors = getDistractorChars(correctChars, 3);
+      tiles = tiles.concat(distractors.map((ch, i) => ({ ch, uid: c.id + "-d" + i + "-" + Math.random() })));
+    }
+    setPool([...tiles].sort(() => Math.random() - 0.5));
     setAnswer([]);
     setBuildResult(null);
     setShowBuildAnswer(false);
+    setTypedAnswer("");
+    setHardResult(null);
+    setHardDiff([]);
   };
 
   const startBuild = () => {
@@ -250,17 +277,41 @@ function App() {
     }
   };
 
-  // Autocalifica cuando ya se colocaron todas las fichas
+  const registerResult = (correct) => {
+    setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
+    if (correct) {
+      speak(buildCard.zh);
+      setTimeout(() => nextBuildCard(), 1200);
+    }
+  };
+
+  // Nivel medio: verificación manual (puede quedar fichas señuelo sin usar)
+  const checkMediumAnswer = () => {
+    const built = answer.map(t => t.ch).join("");
+    const correct = built === buildCard.zh;
+    setBuildResult(correct ? "correct" : "wrong");
+    registerResult(correct);
+  };
+
+  // Nivel difícil (听写 tīngxiě): escribir la frase completa de memoria
+  const checkHardAnswer = () => {
+    const typed = typedAnswer.trim();
+    const target = buildCard.zh;
+    const correct = typed === target;
+    const targetChars = Array.from(target);
+    const typedChars = Array.from(typed);
+    setHardDiff(targetChars.map((ch, i) => ({ ch, ok: typedChars[i] === ch })));
+    setHardResult(correct ? "correct" : "wrong");
+    registerResult(correct);
+  };
+
+  // Autocalifica en nivel fácil cuando ya se colocaron todas las fichas (no hay señuelos)
   useEffect(() => {
-    if (mode === "build" && buildCard && pool.length === 0 && answer.length > 0 && buildResult === null) {
+    if (mode === "build" && builderLevel === "easy" && buildCard && pool.length === 0 && answer.length > 0 && buildResult === null) {
       const built = answer.map(t => t.ch).join("");
       const correct = built === buildCard.zh;
       setBuildResult(correct ? "correct" : "wrong");
-      setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
-      if (correct) {
-        speak(buildCard.zh);
-        setTimeout(() => nextBuildCard(), 1200);
-      }
+      registerResult(correct);
     }
   }, [pool.length, mode]);
 
@@ -471,16 +522,39 @@ function App() {
           开始学习 · Empezar
         </button>
 
-        <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
-          width: "100%", padding: "14px 0", borderRadius: 16, marginTop: 10,
-          border: "2px solid rgba(0,131,143,0.5)",
-          background: buildableCards.length === 0 ? "transparent" : "rgba(0,131,143,0.15)",
-          color: buildableCards.length === 0 ? "#555" : "#4DD0E1",
-          fontSize: 15, fontWeight: "bold", cursor: buildableCards.length === 0 ? "not-allowed" : "pointer",
-          fontFamily: "sans-serif"
-        }}>
-          ✏️ Construir frases ({buildableCards.length} disponibles)
-        </button>
+        {/* Selector de nivel para Construir frases */}
+        <div style={{ marginTop: 14, background: "rgba(255,255,255,0.05)", borderRadius: 14, padding: 12 }}>
+          <p style={{ color: "#4DD0E1", fontSize: 12, margin: "0 0 8px 0", fontFamily: "sans-serif", textAlign: "center" }}>Nivel para construir frases</p>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            {[
+              { v: "easy", label: "🟢 Fácil" },
+              { v: "medium", label: "🟡 Medio" },
+              { v: "hard", label: "🔴 听写" },
+            ].map(lv => (
+              <button key={lv.v} onClick={() => setBuilderLevel(lv.v)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 10, border: `2px solid ${builderLevel === lv.v ? "#4DD0E1" : "rgba(255,255,255,0.15)"}`,
+                background: builderLevel === lv.v ? "rgba(77,208,225,0.15)" : "transparent",
+                color: builderLevel === lv.v ? "#4DD0E1" : "#888", fontSize: 12, fontWeight: builderLevel === lv.v ? "bold" : "normal",
+                cursor: "pointer", fontFamily: "sans-serif"
+              }}>
+                {lv.label}
+              </button>
+            ))}
+          </div>
+          <p style={{ color: "#888", fontSize: 11, margin: "0 0 10px 0", fontFamily: "sans-serif", textAlign: "center", lineHeight: 1.4 }}>
+            {builderLevel === "easy" && "Ordena las fichas exactas de la frase."}
+            {builderLevel === "medium" && "Ordena las fichas, pero hay 3 de más que no pertenecen."}
+            {builderLevel === "hard" && "Escribe la frase completa de memoria, en caracteres chinos — como el 听写 (tīngxiě) que se practica en las escuelas."}
+          </p>
+          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
+            width: "100%", padding: "12px 0", borderRadius: 12, border: "none",
+            background: buildableCards.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
+            color: "white", fontSize: 14, fontWeight: "bold",
+            cursor: buildableCards.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
+          }}>
+            ✏️ Construir frases ({buildableCards.length} disponibles)
+          </button>
+        </div>
 
         <p onClick={resetProgress} style={{ textAlign: "center", color: "#555", fontSize: 11, marginTop: 18, cursor: "pointer", fontFamily: "sans-serif", textDecoration: "underline" }}>
           Reiniciar progreso guardado
@@ -563,6 +637,12 @@ function App() {
   if (mode === "build") {
     if (!buildCard) return null;
     const color2 = UNIT_COLORS[buildCard.unit] || UNIT_COLORS[1];
+    const isHard = builderLevel === "hard";
+    const isMedium = builderLevel === "medium";
+    const resolved = isHard ? hardResult !== null : buildResult !== null;
+    const wasCorrect = isHard ? hardResult === "correct" : buildResult === "correct";
+    const wasWrong = isHard ? hardResult === "wrong" : buildResult === "wrong";
+
     return (
       <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
         <div style={{ maxWidth: 480, width: "100%" }}>
@@ -572,7 +652,7 @@ function App() {
             <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Menú</button>
             <span style={{ color: "#FFD09B", fontSize: 13 }}>{buildIdx + 1} / {buildDeck.length}</span>
             <span style={{ color: color2.accent, fontSize: 12, background: "rgba(255,255,255,0.1)", padding: "3px 10px", borderRadius: 20, fontWeight: "bold" }}>
-              {buildCard.unit <= 10 ? buildCard.unitName : `L2 · U${buildCard.unit - 12}`}
+              {isHard ? "🔴 听写" : isMedium ? "🟡 Medio" : "🟢 Fácil"}
             </span>
           </div>
 
@@ -583,53 +663,109 @@ function App() {
 
           {/* Prompt */}
           <div style={{ background: "rgba(255,255,255,0.06)", borderRadius: 16, padding: "16px 18px", marginBottom: 16, textAlign: "center" }}>
-            <p style={{ color: "#4DD0E1", fontSize: 11, margin: "0 0 8px 0", letterSpacing: 1 }}>ARMA ESTA FRASE EN CHINO</p>
+            <p style={{ color: "#4DD0E1", fontSize: 11, margin: "0 0 8px 0", letterSpacing: 1 }}>
+              {isHard ? "ESCRIBE ESTA FRASE EN CHINO" : "ARMA ESTA FRASE EN CHINO"}
+            </p>
             <p style={{ color: "white", fontSize: 18, margin: 0, lineHeight: 1.4 }}>{buildCard.es}</p>
           </div>
 
-          {/* Answer area */}
-          <div style={{
-            minHeight: 70, background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: 14, marginBottom: 16,
-            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center",
-            border: `2px solid ${buildResult === "correct" ? "#4CAF50" : buildResult === "wrong" ? "#F44336" : "rgba(255,255,255,0.15)"}`,
-            transition: "border-color 0.3s"
-          }}>
-            {answer.length === 0 && <span style={{ color: "#555", fontSize: 13 }}>Toca las fichas de abajo en orden</span>}
-            {answer.map(tile => (
-              <button key={tile.uid} onClick={() => tapAnswerTile(tile)} style={{
-                fontSize: 26, padding: "8px 14px", borderRadius: 10, border: "none",
-                background: buildResult === "correct" ? "rgba(76,175,80,0.25)" : "rgba(77,208,225,0.15)",
-                color: buildResult === "correct" ? "#4CAF50" : "#4DD0E1",
-                cursor: buildResult === "correct" ? "default" : "pointer", fontFamily: "sans-serif"
-              }} disabled={buildResult === "correct"}>
-                {tile.ch}
-              </button>
-            ))}
-          </div>
+          {isHard ? (
+            <>
+              {/* Campo de escritura libre — 听写 */}
+              <textarea
+                value={typedAnswer}
+                onChange={e => setTypedAnswer(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!resolved) checkHardAnswer(); } }}
+                placeholder="打字…（使用中文键盘）"
+                disabled={wasCorrect}
+                style={{
+                  width: "100%", minHeight: 60, background: "rgba(255,255,255,0.05)",
+                  border: `2px solid ${wasCorrect ? "#4CAF50" : wasWrong ? "#F44336" : "rgba(255,255,255,0.15)"}`,
+                  borderRadius: 14, padding: 14, fontSize: 26, color: "white",
+                  fontFamily: "sans-serif", resize: "none", marginBottom: 12, boxSizing: "border-box"
+                }}
+              />
 
-          {/* Feedback message */}
-          {buildResult === "correct" && (
-            <p style={{ textAlign: "center", color: "#4CAF50", fontSize: 15, fontWeight: "bold", marginBottom: 12 }}>✅ ¡Correcto!</p>
-          )}
-          {buildResult === "wrong" && (
-            <p style={{ textAlign: "center", color: "#F44336", fontSize: 14, marginBottom: 12 }}>❌ Casi — revisa el orden y ajusta las fichas</p>
-          )}
+              {wasCorrect && <p style={{ textAlign: "center", color: "#4CAF50", fontSize: 15, fontWeight: "bold", marginBottom: 12 }}>✅ ¡Correcto!</p>}
+              {wasWrong && (
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ textAlign: "center", color: "#F44336", fontSize: 14, marginBottom: 8 }}>❌ No coincide. Así se compara, carácter por carácter:</p>
+                  <p style={{ textAlign: "center", fontSize: 26, letterSpacing: 2 }}>
+                    {hardDiff.map((d, i) => (
+                      <span key={i} style={{ color: d.ok ? "#4CAF50" : "#F44336" }}>{d.ch}</span>
+                    ))}
+                  </p>
+                </div>
+              )}
 
-          {/* Tile pool */}
-          <div style={{
-            minHeight: 70, borderRadius: 16, padding: 14, marginBottom: 16,
-            display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center"
-          }}>
-            {pool.map(tile => (
-              <button key={tile.uid} onClick={() => tapPoolTile(tile)} style={{
-                fontSize: 26, padding: "8px 14px", borderRadius: 10,
-                border: `2px solid ${color2.accent}66`, background: color2.bg,
-                color: "#1a0a00", cursor: "pointer", fontFamily: "sans-serif", fontWeight: "bold"
+              {!wasCorrect && (
+                <button onClick={checkHardAnswer} style={{
+                  width: "100%", padding: "12px 0", borderRadius: 14, border: "none", marginBottom: 16,
+                  background: "linear-gradient(135deg, #00838F, #4DD0E1)", color: "white", fontSize: 14, fontWeight: "bold", cursor: "pointer"
+                }}>
+                  Verificar
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Answer area */}
+              <div style={{
+                minHeight: 70, background: "rgba(255,255,255,0.04)", borderRadius: 16, padding: 14, marginBottom: 16,
+                display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center",
+                border: `2px solid ${wasCorrect ? "#4CAF50" : wasWrong ? "#F44336" : "rgba(255,255,255,0.15)"}`,
+                transition: "border-color 0.3s"
               }}>
-                {tile.ch}
-              </button>
-            ))}
-          </div>
+                {answer.length === 0 && <span style={{ color: "#555", fontSize: 13 }}>Toca las fichas de abajo en orden</span>}
+                {answer.map(tile => (
+                  <button key={tile.uid} onClick={() => tapAnswerTile(tile)} style={{
+                    fontSize: 26, padding: "8px 14px", borderRadius: 10, border: "none",
+                    background: wasCorrect ? "rgba(76,175,80,0.25)" : "rgba(77,208,225,0.15)",
+                    color: wasCorrect ? "#4CAF50" : "#4DD0E1",
+                    cursor: wasCorrect ? "default" : "pointer", fontFamily: "sans-serif"
+                  }} disabled={wasCorrect}>
+                    {tile.ch}
+                  </button>
+                ))}
+              </div>
+
+              {/* Feedback message */}
+              {wasCorrect && (
+                <p style={{ textAlign: "center", color: "#4CAF50", fontSize: 15, fontWeight: "bold", marginBottom: 12 }}>✅ ¡Correcto!</p>
+              )}
+              {wasWrong && (
+                <p style={{ textAlign: "center", color: "#F44336", fontSize: 14, marginBottom: 12 }}>
+                  {isMedium ? "❌ Revisa — puede que haya una ficha de más en tu respuesta" : "❌ Casi — revisa el orden y ajusta las fichas"}
+                </p>
+              )}
+
+              {/* Tile pool */}
+              <div style={{
+                minHeight: 70, borderRadius: 16, padding: 14, marginBottom: isMedium ? 8 : 16,
+                display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "center"
+              }}>
+                {pool.map(tile => (
+                  <button key={tile.uid} onClick={() => tapPoolTile(tile)} style={{
+                    fontSize: 26, padding: "8px 14px", borderRadius: 10,
+                    border: `2px solid ${color2.accent}66`, background: color2.bg,
+                    color: "#1a0a00", cursor: "pointer", fontFamily: "sans-serif", fontWeight: "bold"
+                  }}>
+                    {tile.ch}
+                  </button>
+                ))}
+              </div>
+
+              {isMedium && !wasCorrect && (
+                <button onClick={checkMediumAnswer} disabled={answer.length === 0} style={{
+                  width: "100%", padding: "12px 0", borderRadius: 14, border: "none", marginBottom: 16,
+                  background: answer.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
+                  color: "white", fontSize: 14, fontWeight: "bold", cursor: answer.length === 0 ? "not-allowed" : "pointer"
+                }}>
+                  Verificar
+                </button>
+              )}
+            </>
+          )}
 
           {/* Answer reveal */}
           {showBuildAnswer && (
