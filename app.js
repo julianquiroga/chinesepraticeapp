@@ -269,11 +269,6 @@ function App() {
   const [streak, setStreak] = useState(() => loadStreak());
   const { speak, speaking, voiceReady } = useSpeech();
 
-  // Guarda preferencias automáticamente cuando cambian
-  useEffect(() => {
-    savePrefs({ selectedUnits, studyDir, showPinyin, autoPlay, builderLevel });
-  }, [selectedUnits, studyDir, showPinyin, autoPlay, builderLevel]);
-
   const units = [...new Set(ALL_CARDS.map(c => c.unit))].sort((a,b)=>a-b);
 
   const dueCards = ALL_CARDS.filter(c => isDue(c.id, progress));
@@ -329,6 +324,11 @@ function App() {
 
   // ---------- Modo: Construir frases ----------
   const [builderLevel, setBuilderLevel] = useState(initialPrefs.builderLevel); // easy | medium | hard
+
+  // Guarda preferencias automáticamente cuando cambian (va aquí porque necesita builderLevel ya declarado)
+  useEffect(() => {
+    savePrefs({ selectedUnits, studyDir, showPinyin, autoPlay, builderLevel });
+  }, [selectedUnits, studyDir, showPinyin, autoPlay, builderLevel]);
   const [buildDeck, setBuildDeck] = useState([]);
   const [buildIdx, setBuildIdx] = useState(0);
   const [pool, setPool] = useState([]);

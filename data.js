@@ -1,7 +1,7 @@
 // Datos de las tarjetas — este es el ÚNICO archivo que necesitas actualizar
 // cada vez que agreguemos una unidad nueva.
 
-const ALL_CARDS = [
+window.ALL_CARDS = [
   // UNIT 1
   { id: 1, unit: 1, unitName: "L1 · Saludos", zh: "你好", py: "Nǐ hǎo", es: "Hola",
     exZh: "你好！我叫麦克。", exPy: "Nǐ hǎo! Wǒ jiào Màikè.", exEs: "¡Hola! Me llamo Mike." },
@@ -1141,7 +1141,7 @@ const ALL_CARDS = [
     exZh: "我买错了衣服", exPy: "wǒ mǎi cuò le yīfu", exEs: "compré la ropa equivocada" },
 ];
 
-const UNIT_COLORS = {
+window.UNIT_COLORS = {
   1: { bg: "#FFF3E0", accent: "#FF6B35", light: "#FFE0B2" },
   2: { bg: "#F3E5F5", accent: "#7B1FA2", light: "#E1BEE7" },
   3: { bg: "#E8F5E9", accent: "#2E7D32", light: "#C8E6C9" },
