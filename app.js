@@ -455,7 +455,7 @@ function App() {
   };
 
   const card = deck[currentIdx];
-  const color = card ? UNIT_COLORS[card.unit] : UNIT_COLORS[1];
+  const color = card ? (UNIT_COLORS[card.unit] || UNIT_COLORS[1]) : UNIT_COLORS[1];
 
   const rate = (r) => {
     setRatings(prev => ({ ...prev, [card.id]: r }));
