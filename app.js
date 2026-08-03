@@ -274,18 +274,21 @@ function App() {
 
   const dueCards = ALL_CARDS.filter(c => isDue(c.id, progress));
   const dueCount = dueCards.length;
+  const newDueCount = dueCards.filter(c => !progress[c.id]).length;
+  const reviewDueCount = dueCount - newDueCount;
   const masteredCount = Object.values(progress).filter(p => p.box >= MAX_BOX).length;
   const learningCount = Object.values(progress).filter(p => p.box < MAX_BOX).length;
   const newCount = ALL_CARDS.length - Object.keys(progress).length;
   const masteredPct = Math.round((masteredCount / ALL_CARDS.length) * 100);
   const hasHistory = Object.keys(progress).length > 0;
 
-  const unitMastery = (unitNum) => {
-    const unitCards = ALL_CARDS.filter(c => c.unit === unitNum);
-    if (unitCards.length === 0) return 0;
-    const mastered = unitCards.filter(c => progress[c.id] && progress[c.id].box >= MAX_BOX).length;
-    return Math.round((mastered / unitCards.length) * 100);
+  const masteryFor = (cards) => {
+    if (cards.length === 0) return 0;
+    const mastered = cards.filter(c => progress[c.id] && progress[c.id].box >= MAX_BOX).length;
+    return Math.round((mastered / cards.length) * 100);
   };
+  const unitMastery = (unitNum) => masteryFor(ALL_CARDS.filter(c => c.unit === unitNum));
+  const categoryMastery = (cat) => masteryFor(ALL_CARDS.filter(c => cat.ids.includes(c.id)));
 
   const resetProgress = () => {
     if (window.confirm("¿Seguro que quieres borrar todo tu progreso guardado? Esto no se puede deshacer.")) {
@@ -454,6 +457,7 @@ function App() {
 
   const card = deck[currentIdx];
   const color = card ? (UNIT_COLORS[card.unit] || UNIT_COLORS[1]) : UNIT_COLORS[1];
+  const isReference = card && card.unit === 30;
 
   const rate = (r) => {
     setRatings(prev => ({ ...prev, [card.id]: r }));
@@ -516,21 +520,28 @@ function App() {
         </div>
 
         {/* Racha + progreso general */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, background: "rgba(255,255,255,0.05)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
-          <ProgressRing pct={masteredPct} />
-          <div style={{ flex: 1 }}>
-            {streak.current > 0 && (
-              <p style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", margin: "0 0 6px 0", fontFamily: "sans-serif" }}>
-                🔥 {streak.current} {streak.current === 1 ? "día seguido" : "días seguidos"}
-              </p>
-            )}
-            <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "sans-serif", flexWrap: "wrap" }}>
-              <span style={{ color: "#888" }}>🆕 {newCount}</span>
-              <span style={{ color: "#FF9D3D" }}>📖 {learningCount}</span>
-              <span style={{ color: "#4CAF50" }}>⭐ {masteredCount}</span>
+        {hasHistory ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 16, background: "rgba(255,255,255,0.05)", borderRadius: 18, padding: 16, marginBottom: 14 }}>
+            <ProgressRing pct={masteredPct} />
+            <div style={{ flex: 1 }}>
+              {streak.current > 0 && (
+                <p style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", margin: "0 0 6px 0", fontFamily: "sans-serif" }}>
+                  🔥 {streak.current} {streak.current === 1 ? "día seguido" : "días seguidos"}
+                </p>
+              )}
+              <div style={{ display: "flex", gap: 12, fontSize: 11, fontFamily: "sans-serif", flexWrap: "wrap" }}>
+                <span style={{ color: "#888" }}>🆕 {newCount}</span>
+                <span style={{ color: "#FF9D3D" }}>📖 {learningCount}</span>
+                <span style={{ color: "#4CAF50" }}>⭐ {masteredCount}</span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 18, padding: "18px 16px", marginBottom: 14, textAlign: "center" }}>
+            <p style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", margin: "0 0 4px 0", fontFamily: "sans-serif" }}>👋 ¡Bienvenido!</p>
+            <p style={{ color: "#aaa", fontSize: 12, margin: 0, fontFamily: "sans-serif" }}>Estudia tu primera tarjeta para empezar a ver tu progreso aquí</p>
+          </div>
+        )}
 
         {/* Repaso de hoy */}
         <div style={{
@@ -545,7 +556,12 @@ function App() {
                 El sistema elige qué se te va a olvidar pronto, de todas tus unidades
               </p>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ color: "white", fontSize: 22, fontWeight: "bold", fontFamily: "sans-serif" }}>{dueCount} tarjetas</span>
+                <div>
+                  <span style={{ color: "white", fontSize: 22, fontWeight: "bold", fontFamily: "sans-serif" }}>{dueCount} tarjetas</span>
+                  <div style={{ color: "rgba(255,255,255,0.8)", fontSize: 11, marginTop: 2, fontFamily: "sans-serif" }}>
+                    {[newDueCount > 0 && `🆕 ${newDueCount} nuevas`, reviewDueCount > 0 && `🔁 ${reviewDueCount} repaso`].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
                 <button onClick={startReviewToday} style={{
                   background: "white", color: "#FF6B35", border: "none", borderRadius: 12,
                   padding: "10px 20px", fontSize: 14, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
@@ -805,20 +821,26 @@ function App() {
           Las estructuras se repiten en muchas unidades. Aquí están agrupadas por tipo, sin importar en qué semana las viste.
         </p>
 
-        {PATTERN_CATEGORIES.map(cat => (
-          <button key={cat.key} onClick={() => openCategory(cat)} style={{
-            width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "16px 18px", borderRadius: 16, marginBottom: 10,
-            border: `2px solid ${cat.color}55`, background: `${cat.color}15`,
-            cursor: "pointer", textAlign: "left"
-          }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 24 }}>{cat.icon}</span>
-              <span style={{ color: "white", fontSize: 15, fontWeight: "bold" }}>{cat.label}</span>
-            </span>
-            <span style={{ color: cat.color, fontSize: 13, fontWeight: "bold" }}>{cat.ids.length} →</span>
-          </button>
-        ))}
+        {PATTERN_CATEGORIES.map(cat => {
+          const pct = categoryMastery(cat);
+          return (
+            <button key={cat.key} onClick={() => openCategory(cat)} style={{
+              width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "16px 18px", borderRadius: 16, marginBottom: 10,
+              border: `2px solid ${cat.color}55`, background: `${cat.color}15`,
+              cursor: "pointer", textAlign: "left"
+            }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24 }}>{cat.icon}</span>
+                <span style={{ color: "white", fontSize: 15, fontWeight: "bold" }}>{cat.label}</span>
+              </span>
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2 }}>
+                <span style={{ color: cat.color, fontSize: 13, fontWeight: "bold" }}>{cat.ids.length} →</span>
+                <span style={{ color: pct > 0 ? "#4CAF50" : "#888", fontSize: 10, fontFamily: "sans-serif" }}>{pct > 0 ? `⭐${pct}%` : "—"}</span>
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -1107,13 +1129,24 @@ function App() {
           borderRadius: 24, padding: "32px 24px", minHeight: 260,
           display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
           cursor: flipped ? "default" : "pointer",
-          border: `2px solid ${flipped ? color.accent : "rgba(255,255,255,0.1)"}`,
+          borderTop: `2px solid ${flipped ? color.accent : "rgba(255,255,255,0.1)"}`,
+          borderRight: `2px solid ${flipped ? color.accent : "rgba(255,255,255,0.1)"}`,
+          borderBottom: `2px solid ${flipped ? color.accent : "rgba(255,255,255,0.1)"}`,
+          borderLeft: `6px solid ${color.accent}`,
           transition: "all 0.35s ease", boxShadow: flipped ? `0 8px 32px ${color.accent}33` : "none",
           opacity: animating ? 0 : 1,
           transform: animating ? "scale(0.95)" : "scale(1)"
         }}>
           {!flipped ? (
             <>
+              {isReference && (
+                <span style={{
+                  background: `${color.accent}22`, border: `1px solid ${color.accent}55`, color: color.accent,
+                  borderRadius: 20, padding: "3px 12px", fontSize: 11, fontWeight: "bold", marginBottom: 14
+                }}>
+                  📖 Ficha de referencia
+                </span>
+              )}
               {studyDir === "zh→es" && (
                 <>
                   <div style={{ fontSize: 42, fontWeight: "bold", color: "white", marginBottom: 12, textAlign: "center" }}>{card.zh}</div>
@@ -1133,7 +1166,7 @@ function App() {
                 <div style={{ fontSize: 22, color: "white", textAlign: "center", lineHeight: 1.4 }}>{card.es}</div>
               )}
               <div style={{ marginTop: 16, color: "#555", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
-                <span>👆</span> Toca para revelar
+                <span>👆</span> {isReference ? "Toca para ver la explicación" : "Toca para revelar"}
               </div>
             </>
           ) : (
@@ -1190,7 +1223,7 @@ function App() {
               flex: 1, padding: "14px 0", borderRadius: 14, border: "2px solid rgba(255,107,53,0.4)",
               background: "rgba(255,107,53,0.1)", color: "#FF9D3D", fontSize: 14, fontWeight: "bold", cursor: "pointer"
             }}>
-              Revelar 👁
+              {isReference ? "Ver explicación 📖" : "Revelar 👁"}
             </button>
           </div>
         )}
