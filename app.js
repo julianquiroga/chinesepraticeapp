@@ -144,11 +144,13 @@ function ExampleBox({ card, color, speak, speaking, showPinyin }) {
         <span style={{ fontSize: 15, color: color.accent, fontWeight: "bold", textAlign: "center", lineHeight: 1.5 }}>
           {card.exZh}
         </span>
-        <button onClick={() => speak(card.exZh)} style={{
-          background: speaking ? `${color.accent}33` : "transparent",
-          border: `1px solid ${color.accent}55`, borderRadius: 20,
-          padding: "3px 8px", color: color.accent, fontSize: 12, cursor: "pointer", flexShrink: 0
-        }}>🔊</button>
+        {isSpeakableZh(card.exZh) && (
+          <button onClick={() => speak(card.exZh)} style={{
+            background: speaking ? `${color.accent}33` : "transparent",
+            border: `1px solid ${color.accent}55`, borderRadius: 20,
+            padding: "3px 8px", color: color.accent, fontSize: 12, cursor: "pointer", flexShrink: 0
+          }}>🔊</button>
+        )}
       </div>
 
       {/* Pinyin reveal */}
@@ -289,6 +291,14 @@ function isGoodForBuilder(card) {
   if (/[A-Za-z]/.test(zh)) return false;
   if (zh.includes("……") || zh.includes("___")) return false;
   return true;
+}
+
+// Algunas fichas de referencia mezclan pinyin/español entre paréntesis en el
+// campo zh (ej. "个(gè) — palabra medida universal") — eso no se debe leer en
+// voz alta con una voz china. Esto detecta si el texto es chino "limpio".
+function isSpeakableZh(text) {
+  if (!text) return false;
+  return !/[（(a-zA-Z]/.test(text.replace(/[❌✅]/g, ""));
 }
 
 // ---------- Modo: Patrones gramaticales ----------
@@ -647,7 +657,7 @@ function App() {
 
   const card = deck[currentIdx];
   const color = card ? (UNIT_COLORS[card.unit] || UNIT_COLORS[1]) : UNIT_COLORS[1];
-  const isReference = card && card.unit === 30;
+  const isReference = card && card.unitName && card.unitName.includes("📐");
 
   const rate = (r) => {
     setRatings(prev => ({ ...prev, [card.id]: r }));
@@ -671,9 +681,10 @@ function App() {
     }, 300);
   };
 
-  // Auto-play audio when card flips to reveal Chinese
+  // Auto-play audio when card flips to reveal Chinese (algunas fichas de
+  // referencia mezclan texto en español/pinyin en el campo zh — esas no se leen)
   useEffect(() => {
-    if (flipped && autoPlay && card) speak(card.zh);
+    if (flipped && autoPlay && card && isSpeakableZh(card.zh)) speak(card.zh);
   }, [flipped, card?.id]);
 
   const toggleUnit = (u) => {
@@ -1025,10 +1036,12 @@ function App() {
                   <p style={{ color: "white", fontSize: 17, fontWeight: "bold", margin: "0 0 2px 0" }}>{c.zh}</p>
                   {showPinyin && <p style={{ fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.py, true)}</p>}
                 </div>
-                <button onClick={() => speak(c.zh.replace(/[❌✅]/g, ""))} style={{
-                  background: "none", border: `1px solid ${cat.color}66`, borderRadius: 20,
-                  padding: "3px 8px", color: cat.color, fontSize: 12, cursor: "pointer", flexShrink: 0
-                }}>🔊</button>
+                {isSpeakableZh(c.zh) && (
+                  <button onClick={() => speak(c.zh.replace(/[❌✅]/g, ""))} style={{
+                    background: "none", border: `1px solid ${cat.color}66`, borderRadius: 20,
+                    padding: "3px 8px", color: cat.color, fontSize: 12, cursor: "pointer", flexShrink: 0
+                  }}>🔊</button>
+                )}
               </div>
               <p style={{ color: "#ccc", fontSize: 13, margin: "0 0 8px 0", lineHeight: 1.4 }}>{c.es}</p>
               <div style={{ background: `${cat.color}12`, borderRadius: 10, padding: "8px 12px" }}>
@@ -1456,15 +1469,17 @@ function App() {
               {studyDir === "zh→es" && (
                 <>
                   <div style={{ fontSize: 42, fontWeight: "bold", color: "white", marginBottom: 12, textAlign: "center" }}>{card.zh}</div>
-                  <button onClick={(e) => { e.stopPropagation(); speak(card.zh); }} style={{
-                    background: speaking ? "rgba(255,107,53,0.3)" : "rgba(255,255,255,0.1)",
-                    border: `1px solid ${speaking ? "#FF6B35" : "rgba(255,255,255,0.2)"}`,
-                    borderRadius: 30, padding: "8px 18px", color: speaking ? "#FF9D3D" : "#aaa",
-                    fontSize: 15, cursor: "pointer", marginBottom: 12,
-                    transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6
-                  }}>
-                    {speaking ? "🔊 Reproduciendo..." : "🔊 Escuchar"}
-                  </button>
+                  {isSpeakableZh(card.zh) && (
+                    <button onClick={(e) => { e.stopPropagation(); speak(card.zh); }} style={{
+                      background: speaking ? "rgba(255,107,53,0.3)" : "rgba(255,255,255,0.1)",
+                      border: `1px solid ${speaking ? "#FF6B35" : "rgba(255,255,255,0.2)"}`,
+                      borderRadius: 30, padding: "8px 18px", color: speaking ? "#FF9D3D" : "#aaa",
+                      fontSize: 15, cursor: "pointer", marginBottom: 12,
+                      transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6
+                    }}>
+                      {speaking ? "🔊 Reproduciendo..." : "🔊 Escuchar"}
+                    </button>
+                  )}
                   <FrontPinyinReveal pinyin={card.py} cardId={card.id} showPinyin={showPinyin} />
                 </>
               )}
@@ -1483,15 +1498,17 @@ function App() {
               <div style={{ fontSize: 18, color: "#333", marginBottom: 12, textAlign: "center" }}>{back_es}</div>
 
               {/* Speaker button on back */}
-              <button onClick={(e) => { e.stopPropagation(); speak(card.zh); }} style={{
-                background: speaking ? `${color.accent}33` : `${color.accent}15`,
-                border: `1px solid ${color.accent}66`,
-                borderRadius: 30, padding: "7px 18px", color: color.accent,
-                fontSize: 14, cursor: "pointer", marginBottom: 10,
-                transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6
-              }}>
-                {speaking ? "🔊 Reproduciendo..." : "🔊 Escuchar de nuevo"}
-              </button>
+              {isSpeakableZh(card.zh) && (
+                <button onClick={(e) => { e.stopPropagation(); speak(card.zh); }} style={{
+                  background: speaking ? `${color.accent}33` : `${color.accent}15`,
+                  border: `1px solid ${color.accent}66`,
+                  borderRadius: 30, padding: "7px 18px", color: color.accent,
+                  fontSize: 14, cursor: "pointer", marginBottom: 10,
+                  transition: "all 0.2s", display: "flex", alignItems: "center", gap: 6
+                }}>
+                  {speaking ? "🔊 Reproduciendo..." : "🔊 Escuchar de nuevo"}
+                </button>
+              )}
 
               <button onClick={(e) => { e.stopPropagation(); setShowExample(s => !s); }} style={{
                 background: "none", border: `1px solid ${color.accent}44`, borderRadius: 20, padding: "6px 14px",
