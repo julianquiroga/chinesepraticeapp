@@ -539,7 +539,10 @@ function App() {
         }}>
           {dueCount > 0 ? (
             <>
-              <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 4px 0", fontFamily: "sans-serif" }}>📅 Repaso de hoy</p>
+              <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: "0 0 2px 0", fontFamily: "sans-serif" }}>📅 Repaso de hoy</p>
+              <p style={{ color: "rgba(255,255,255,0.65)", fontSize: 11, margin: "0 0 8px 0", fontFamily: "sans-serif" }}>
+                El sistema elige qué se te va a olvidar pronto, de todas tus unidades
+              </p>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ color: "white", fontSize: 22, fontWeight: "bold", fontFamily: "sans-serif" }}>{dueCount} tarjetas</span>
                 <button onClick={startReviewToday} style={{
@@ -571,13 +574,16 @@ function App() {
 
         {/* Navegación principal */}
         <button onClick={startStudy} disabled={selectedUnits.length === 0} style={{
-          width: "100%", padding: "18px 0", borderRadius: 16, border: "none", marginBottom: 10,
+          width: "100%", padding: "18px 0", borderRadius: 16, border: "none", marginBottom: 4,
           background: selectedUnits.length === 0 ? "#444" : "linear-gradient(135deg, #FF6B35, #FF9D3D)",
           color: "white", fontSize: 17, fontWeight: "bold", cursor: selectedUnits.length === 0 ? "not-allowed" : "pointer",
           fontFamily: "sans-serif", letterSpacing: 0.5, boxShadow: "0 4px 20px rgba(255,107,53,0.35)"
         }}>
           📚 Flashcards · {ALL_CARDS.filter(c => selectedUnits.includes(c.unit)).length} tarjetas
         </button>
+        <p style={{ textAlign: "center", color: "#666", fontSize: 11, margin: "0 0 10px 0", fontFamily: "sans-serif" }}>
+          Tú eliges el tema: repasa todas las tarjetas de tus unidades seleccionadas
+        </p>
 
         {/* Selector de nivel para Construir frases */}
         <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 12, marginBottom: 10 }}>
