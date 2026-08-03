@@ -2,35 +2,78 @@ const { useState, useEffect, useCallback, useRef } = React;
 
 // ---------- Color por tono (pinyin) ----------
 // Asocia cada tono del mandarín a un color fijo — técnica mnemónica estándar
-// para memorizar tonos (los verificados: 4.5:1+ de contraste en fondos claros
+// para memorizar tonos (verificados: 4.5:1+ de contraste en fondos claros
 // y oscuros reales de la app; ver auditoría de diseño).
-const TONE_MARKS = {
-  "ā":1,"ē":1,"ī":1,"ō":1,"ū":1,"ǖ":1,"Ā":1,"Ē":1,"Ī":1,"Ō":1,"Ū":1,"Ǖ":1,
-  "á":2,"é":2,"í":2,"ó":2,"ú":2,"ǘ":2,"Á":2,"É":2,"Í":2,"Ó":2,"Ú":2,"Ǘ":2,
-  "ǎ":3,"ě":3,"ǐ":3,"ǒ":3,"ǔ":3,"ǚ":3,"Ǎ":3,"Ě":3,"Ǐ":3,"Ǒ":3,"Ǔ":3,"Ǚ":3,
-  "à":4,"è":4,"ì":4,"ò":4,"ù":4,"ǜ":4,"À":4,"È":4,"Ì":4,"Ò":4,"Ù":4,"Ǜ":4,
+// Cada carácter con tilde de tono mapea a [letra base, número de tono], para
+// poder reconstruir tanto el tono como la forma "plana" de la palabra.
+const TONE_VOWELS = {
+  "ā":["a",1],"ē":["e",1],"ī":["i",1],"ō":["o",1],"ū":["u",1],"ǖ":["ü",1],
+  "Ā":["a",1],"Ē":["e",1],"Ī":["i",1],"Ō":["o",1],"Ū":["u",1],"Ǖ":["ü",1],
+  "á":["a",2],"é":["e",2],"í":["i",2],"ó":["o",2],"ú":["u",2],"ǘ":["ü",2],
+  "Á":["a",2],"É":["e",2],"Í":["i",2],"Ó":["o",2],"Ú":["u",2],"Ǘ":["ü",2],
+  "ǎ":["a",3],"ě":["e",3],"ǐ":["i",3],"ǒ":["o",3],"ǔ":["u",3],"ǚ":["ü",3],
+  "Ǎ":["a",3],"Ě":["e",3],"Ǐ":["i",3],"Ǒ":["o",3],"Ǔ":["u",3],"Ǚ":["ü",3],
+  "à":["a",4],"è":["e",4],"ì":["i",4],"ò":["o",4],"ù":["u",4],"ǜ":["ü",4],
+  "À":["a",4],"È":["e",4],"Ì":["i",4],"Ò":["o",4],"Ù":["u",4],"Ǜ":["ü",4],
 };
 const TONE_COLORS_LIGHT = { 1: "#B23A2E", 2: "#8A5A00", 3: "#256B29", 4: "#1257A6", 0: "#5F5F5F" };
 const TONE_COLORS_DARK  = { 1: "#FF8A80", 2: "#FFB74D", 3: "#81C784", 4: "#82C4FF", 0: "#BDBDBD" };
 
-function toneOf(word) {
+// Iniciales y finales válidas del pinyin, para partir una palabra pegada
+// (ej. "wǒmen") en sus sílabas reales — de lo contrario toda la palabra se
+// pinta de un solo color según la primera tilde que aparezca.
+const PINYIN_INITIALS = ["zh","ch","sh","b","p","m","f","d","t","n","l","g","k","h","j","q","x","r","z","c","s","y","w"];
+const PINYIN_FINALS = [...new Set([
+  "iang","iong","uang","ueng",
+  "ang","eng","ong","ai","ei","ao","ou","an","en","er",
+  "ia","ie","iu","iao","ian","in","ing",
+  "ua","uo","ui","uai","uan","un",
+  "ue","üe","üan","ün",
+  "a","o","e","i","u","ü",
+])].sort((a, b) => b.length - a.length);
+
+// Divide una palabra pinyin (con tildes) en sus sílabas reales con su tono,
+// usando coincidencia de máxima longitud contra iniciales/finales válidas.
+function pinyinSyllables(word) {
+  let flat = "";
+  const toneAt = {};
   for (const ch of word) {
-    if (TONE_MARKS[ch]) return TONE_MARKS[ch];
+    const mapped = TONE_VOWELS[ch];
+    if (mapped) { toneAt[flat.length] = mapped[1]; flat += mapped[0]; }
+    else flat += ch.toLowerCase();
   }
-  return 0;
+  const bounds = [];
+  let i = 0;
+  while (i < flat.length) {
+    const initial = PINYIN_INITIALS.find(ini => flat.startsWith(ini, i)) || "";
+    const afterInitial = i + initial.length;
+    const final = PINYIN_FINALS.find(fin => flat.startsWith(fin, afterInitial));
+    const end = final ? afterInitial + final.length : i + 1; // sin final válida: no se traba, avanza 1
+    bounds.push([i, end]);
+    i = end;
+  }
+  return bounds.map(([start, end]) => {
+    let tone = 0;
+    for (let k = start; k < end; k++) if (toneAt[k]) tone = toneAt[k];
+    return { text: word.slice(start, end), tone };
+  });
 }
 
-// Colorea cada palabra pinyin según su tono; deja espacios/puntuación sin colorear.
+// Colorea cada sílaba pinyin según su tono; deja espacios/puntuación sin colorear.
 function renderPinyinTone(text, dark) {
   if (!text) return null;
   const palette = dark ? TONE_COLORS_DARK : TONE_COLORS_LIGHT;
   const parts = text.split(/([\p{L}]+)/u);
   return parts.map((part, i) => {
     if (!part) return null;
-    if (/\p{L}/u.test(part)) {
-      return <span key={i} style={{ color: palette[toneOf(part)] }}>{part}</span>;
-    }
-    return part;
+    if (!/\p{L}/u.test(part)) return part;
+    return (
+      <React.Fragment key={i}>
+        {pinyinSyllables(part).map((syl, j) => (
+          <span key={j} style={{ color: palette[syl.tone] }}>{syl.text}</span>
+        ))}
+      </React.Fragment>
+    );
   });
 }
 
