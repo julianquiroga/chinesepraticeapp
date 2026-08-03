@@ -331,13 +331,32 @@ function ProgressRing({ pct, size = 84, color = "#FF9D3D" }) {
 }
 
 // ---------- Navegación principal (tabbar fijo) ----------
-const HUB_MODES = ["menu", "patterns", "buildHub", "settings"];
+const HUB_MODES = ["menu", "patterns", "buildHub", "writingHub", "settings"];
 const TABS = [
   { key: "menu", icon: "🏠", label: "Inicio" },
   { key: "patterns", icon: "📐", label: "Patrones" },
   { key: "buildHub", icon: "✏️", label: "Construir" },
+  { key: "writingHub", icon: "🖌️", label: "Escritura" },
   { key: "settings", icon: "⚙️", label: "Opciones" },
 ];
+
+// ---------- Escritura de trazos ----------
+const HAN_REGEX = /[一-鿿]/g;
+function uniqueCharsForUnits(units) {
+  const seen = new Set();
+  const chars = [];
+  ALL_CARDS.filter(c => units.includes(c.unit)).forEach(c => {
+    const matches = (c.zh || "").match(HAN_REGEX);
+    if (!matches) return;
+    matches.forEach(ch => {
+      if (!seen.has(ch) && STROKES_DATA && STROKES_DATA[ch]) {
+        seen.add(ch);
+        chars.push(ch);
+      }
+    });
+  });
+  return chars;
+}
 
 function TabBar({ activeMode, setMode }) {
   return (
@@ -503,6 +522,59 @@ function App() {
     shuffleTilesFor(shuffled[0]);
     setMode("build");
   };
+
+  // ---------- Modo: Escritura de trazos ----------
+  const [writeDeck, setWriteDeck] = useState([]);
+  const [writeIdx, setWriteIdx] = useState(0);
+  const [writeComplete, setWriteComplete] = useState(false);
+  const [writeStats, setWriteStats] = useState({ done: 0 });
+  const writeTargetRef = useRef(null);
+  const writeWriterRef = useRef(null);
+
+  const writableChars = uniqueCharsForUnits(selectedUnits);
+  const writeChar = writeDeck[writeIdx];
+
+  const startWriting = () => {
+    const shuffled = [...writableChars].sort(() => Math.random() - 0.5);
+    setWriteDeck(shuffled);
+    setWriteIdx(0);
+    setWriteComplete(false);
+    setWriteStats({ done: 0 });
+    setMode("writing");
+  };
+
+  const nextWriteChar = () => {
+    if (writeIdx + 1 >= writeDeck.length) {
+      setMode("menu");
+    } else {
+      setWriteIdx(i => i + 1);
+      setWriteComplete(false);
+    }
+  };
+
+  // Crea/recrea el trazador cada vez que cambia el carácter actual
+  useEffect(() => {
+    if (mode !== "writing" || !writeChar || !writeTargetRef.current) return;
+    writeTargetRef.current.innerHTML = "";
+    const writer = HanziWriter.create(writeTargetRef.current, writeChar, {
+      width: 260, height: 260, padding: 16,
+      showOutline: true,
+      strokeColor: "#241209",
+      outlineColor: "#e5d9c9",
+      drawingColor: "#C6501F",
+      charDataLoader: (ch, onComplete) => onComplete(STROKES_DATA[ch]),
+    });
+    writeWriterRef.current = writer;
+    writer.quiz({
+      showHintAfterMisses: 2,
+      onComplete: () => {
+        setWriteComplete(true);
+        setWriteStats(prev => ({ done: prev.done + 1 }));
+        recordActivity(streak, setStreak);
+      },
+    });
+    return () => { writeWriterRef.current = null; };
+  }, [mode, writeChar]);
 
   const tapPoolTile = (tile) => {
     setPool(prev => prev.filter(t => t.uid !== tile.uid));
@@ -1057,6 +1129,113 @@ function App() {
       <TabBar activeMode={mode} setMode={setMode} />
     </div>
   );
+
+  // Tab: Escritura — practicar el orden de trazos de los caracteres
+  if (mode === "writingHub") return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", paddingBottom: "calc(20px + 64px + env(safe-area-inset-bottom, 0px))", fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: 480, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <span style={{ color: "#C6501F", fontSize: 15, fontWeight: "bold" }}>🖌️ Escritura</span>
+        </div>
+        <p style={{ color: "#FFD09B", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 1.5 }}>
+          Practica el orden de trazos de los caracteres de tus unidades seleccionadas, uno por uno.
+        </p>
+
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16, marginBottom: 14, textAlign: "center" }}>
+          <div style={{ fontSize: 34, marginBottom: 8 }}>{writableChars.slice(0, 6).join(" ")}</div>
+          <button onClick={startWriting} disabled={writableChars.length === 0} style={{
+            width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+            background: writableChars.length === 0 ? "#444" : "linear-gradient(135deg, #C6501F, #FF9D3D)",
+            color: "white", fontSize: 15, fontWeight: "bold",
+            cursor: writableChars.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
+          }}>
+            🖌️ Comenzar · {writableChars.length} caracteres
+          </button>
+        </div>
+        {writableChars.length === 0 && (
+          <p style={{ color: "#888", fontSize: 12, textAlign: "center" }}>
+            Selecciona unidades en Opciones para practicar sus caracteres.
+          </p>
+        )}
+      </div>
+      <TabBar activeMode={mode} setMode={setMode} />
+    </div>
+  );
+
+  // Modo: Escritura de trazos (sesión activa)
+  if (mode === "writing") {
+    if (!writeChar) return null;
+    return (
+      <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
+        <div style={{ maxWidth: 480, width: "100%" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Menú</button>
+            <span style={{ color: "#FFD09B", fontSize: 13 }}>{writeIdx + 1} / {writeDeck.length}</span>
+            <span style={{ color: "#C6501F", fontSize: 12, background: "rgba(255,255,255,0.1)", padding: "3px 10px", borderRadius: 20, fontWeight: "bold" }}>
+              ✅ {writeStats.done}
+            </span>
+          </div>
+
+          <div style={{ background: "rgba(255,255,255,0.1)", borderRadius: 4, height: 5, marginBottom: 20, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${(writeIdx / writeDeck.length) * 100}%`, background: "linear-gradient(90deg, #C6501F, #FF9D3D)", borderRadius: 4, transition: "width 0.4s" }} />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{
+              width: 280, height: 280, background: "#F7F1E8", borderRadius: 20, boxSizing: "border-box",
+              border: `2px solid ${writeComplete ? "#4CAF50" : "#C6501F"}`, marginBottom: 16, padding: 10,
+              boxShadow: "0 6px 20px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <div ref={writeTargetRef} />
+            </div>
+
+            {writeComplete && (
+              <p style={{ color: "#4CAF50", fontSize: 15, fontWeight: "bold", marginBottom: 12 }}>✅ ¡Completo!</p>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <button onClick={() => speak(writeChar)} style={{
+                padding: "10px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+              }}>
+                🔊
+              </button>
+              <button onClick={() => {
+                if (writeWriterRef.current) {
+                  setWriteComplete(false);
+                  writeWriterRef.current.quiz({
+                    showHintAfterMisses: 2,
+                    onComplete: () => { setWriteComplete(true); setWriteStats(prev => ({ done: prev.done + 1 })); recordActivity(streak, setStreak); },
+                  });
+                }
+              }} style={{
+                padding: "10px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+              }}>
+                🔄 Reiniciar
+              </button>
+              <button onClick={() => {
+                if (writeWriterRef.current) writeWriterRef.current.animateCharacter();
+              }} style={{
+                padding: "10px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+              }}>
+                💡 Pista
+              </button>
+            </div>
+
+            <button onClick={nextWriteChar} style={{
+              width: "100%", padding: "14px 0", borderRadius: 14, border: "none",
+              background: writeComplete ? "linear-gradient(135deg, #C6501F, #FF9D3D)" : "rgba(255,255,255,0.08)",
+              color: writeComplete ? "white" : "#888", fontSize: 14, fontWeight: "bold", cursor: "pointer"
+            }}>
+              {writeIdx + 1 >= writeDeck.length ? "Terminar" : "Siguiente →"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Modo: Construir frases
   if (mode === "build") {
