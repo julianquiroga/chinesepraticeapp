@@ -1,5 +1,39 @@
 const { useState, useEffect, useCallback, useRef } = React;
 
+// ---------- Color por tono (pinyin) ----------
+// Asocia cada tono del mandarín a un color fijo — técnica mnemónica estándar
+// para memorizar tonos (los verificados: 4.5:1+ de contraste en fondos claros
+// y oscuros reales de la app; ver auditoría de diseño).
+const TONE_MARKS = {
+  "ā":1,"ē":1,"ī":1,"ō":1,"ū":1,"ǖ":1,"Ā":1,"Ē":1,"Ī":1,"Ō":1,"Ū":1,"Ǖ":1,
+  "á":2,"é":2,"í":2,"ó":2,"ú":2,"ǘ":2,"Á":2,"É":2,"Í":2,"Ó":2,"Ú":2,"Ǘ":2,
+  "ǎ":3,"ě":3,"ǐ":3,"ǒ":3,"ǔ":3,"ǚ":3,"Ǎ":3,"Ě":3,"Ǐ":3,"Ǒ":3,"Ǔ":3,"Ǚ":3,
+  "à":4,"è":4,"ì":4,"ò":4,"ù":4,"ǜ":4,"À":4,"È":4,"Ì":4,"Ò":4,"Ù":4,"Ǜ":4,
+};
+const TONE_COLORS_LIGHT = { 1: "#B23A2E", 2: "#8A5A00", 3: "#256B29", 4: "#1257A6", 0: "#5F5F5F" };
+const TONE_COLORS_DARK  = { 1: "#FF8A80", 2: "#FFB74D", 3: "#81C784", 4: "#82C4FF", 0: "#BDBDBD" };
+
+function toneOf(word) {
+  for (const ch of word) {
+    if (TONE_MARKS[ch]) return TONE_MARKS[ch];
+  }
+  return 0;
+}
+
+// Colorea cada palabra pinyin según su tono; deja espacios/puntuación sin colorear.
+function renderPinyinTone(text, dark) {
+  if (!text) return null;
+  const palette = dark ? TONE_COLORS_DARK : TONE_COLORS_LIGHT;
+  const parts = text.split(/([\p{L}]+)/u);
+  return parts.map((part, i) => {
+    if (!part) return null;
+    if (/\p{L}/u.test(part)) {
+      return <span key={i} style={{ color: palette[toneOf(part)] }}>{part}</span>;
+    }
+    return part;
+  });
+}
+
 function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const [voiceReady, setVoiceReady] = useState(false);
@@ -49,7 +83,7 @@ function FrontPinyinReveal({ pinyin, cardId }) {
       拼 Ver pinyin
     </button>
   ) : (
-    <div style={{ fontSize: 16, color: "#FF9D3D", fontStyle: "italic" }}>{pinyin}</div>
+    <div style={{ fontSize: 16, fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(pinyin, true)}</div>
   );
 }
 
@@ -84,8 +118,8 @@ function ExampleBox({ card, color, speak, speaking }) {
           拼 Ver pinyin
         </button>
       ) : (
-        <p style={{ fontSize: 13, color: "#666", textAlign: "center", margin: "0 0 6px 0", fontStyle: "italic" }}>
-          {card.exPy}
+        <p style={{ fontSize: 13, textAlign: "center", margin: "0 0 6px 0", fontStyle: "italic", color: TONE_COLORS_LIGHT[0] }}>
+          {renderPinyinTone(card.exPy, false)}
         </p>
       )}
 
@@ -866,7 +900,7 @@ function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div>
                   <p style={{ color: "white", fontSize: 17, fontWeight: "bold", margin: "0 0 2px 0" }}>{c.zh}</p>
-                  <p style={{ color: "#999", fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0" }}>{c.py}</p>
+                  <p style={{ fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.py, true)}</p>
                 </div>
                 <button onClick={() => speak(c.zh.replace(/[❌✅]/g, ""))} style={{
                   background: "none", border: `1px solid ${cat.color}66`, borderRadius: 20,
@@ -876,7 +910,7 @@ function App() {
               <p style={{ color: "#ccc", fontSize: 13, margin: "0 0 8px 0", lineHeight: 1.4 }}>{c.es}</p>
               <div style={{ background: `${cat.color}12`, borderRadius: 10, padding: "8px 12px" }}>
                 <p style={{ color: cat.color, fontSize: 13, margin: "0 0 2px 0" }}>{c.exZh}</p>
-                <p style={{ color: "#888", fontSize: 11, margin: "0 0 2px 0", fontStyle: "italic" }}>{c.exPy}</p>
+                <p style={{ fontSize: 11, margin: "0 0 2px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.exPy, true)}</p>
                 <p style={{ color: "#aaa", fontSize: 12, margin: 0 }}>{c.exEs}</p>
               </div>
             </div>
@@ -1070,7 +1104,7 @@ function App() {
           {showBuildAnswer && (
             <div style={{ background: `${color2.accent}15`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, textAlign: "center" }}>
               <p style={{ fontSize: 22, color: color2.accent, fontWeight: "bold", margin: "0 0 4px 0" }}>{buildCard.zh}</p>
-              <p style={{ fontSize: 14, color: "#999", margin: "0 0 4px 0", fontStyle: "italic" }}>{buildCard.py}</p>
+              <p style={{ fontSize: 14, margin: "0 0 4px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(buildCard.py, true)}</p>
               <p style={{ fontSize: 13, color: "#ccc", margin: 0 }}>{buildCard.es}</p>
             </div>
           )}
@@ -1171,8 +1205,9 @@ function App() {
             </>
           ) : (
             <>
+              {card.emoji && <div style={{ fontSize: 34, marginBottom: 4 }}>{card.emoji}</div>}
               <div style={{ fontSize: 38, fontWeight: "bold", color: color.accent, marginBottom: 4, textAlign: "center" }}>{back_zh}</div>
-              {showPinyin && <div style={{ fontSize: 15, color: "#777", marginBottom: 6 }}>{back_py}</div>}
+              {showPinyin && <div style={{ fontSize: 15, marginBottom: 6, color: TONE_COLORS_LIGHT[0] }}>{renderPinyinTone(back_py, false)}</div>}
               <div style={{ fontSize: 18, color: "#333", marginBottom: 12, textAlign: "center" }}>{back_es}</div>
 
               {/* Speaker button on back */}
