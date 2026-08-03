@@ -114,9 +114,10 @@ function useSpeech() {
 }
 
 
-function FrontPinyinReveal({ pinyin, cardId }) {
+function FrontPinyinReveal({ pinyin, cardId, showPinyin }) {
   const [shown, setShown] = useState(false);
   useEffect(() => setShown(false), [cardId]);
+  if (!showPinyin) return null;
   return !shown ? (
     <button onClick={e => { e.stopPropagation(); setShown(true); }} style={{
       background: "rgba(255,255,255,0.07)", border: "1px dashed rgba(255,157,61,0.5)",
@@ -130,7 +131,7 @@ function FrontPinyinReveal({ pinyin, cardId }) {
   );
 }
 
-function ExampleBox({ card, color, speak, speaking }) {
+function ExampleBox({ card, color, speak, speaking, showPinyin }) {
   const [showPy, setShowPy] = useState(false);
   const [showEs, setShowEs] = useState(false);
   return (
@@ -151,7 +152,7 @@ function ExampleBox({ card, color, speak, speaking }) {
       </div>
 
       {/* Pinyin reveal */}
-      {!showPy ? (
+      {showPinyin && (!showPy ? (
         <button onClick={() => setShowPy(true)} style={{
           display: "block", width: "100%", marginBottom: 6,
           background: `${color.accent}10`, border: `1px dashed ${color.accent}55`,
@@ -164,7 +165,7 @@ function ExampleBox({ card, color, speak, speaking }) {
         <p style={{ fontSize: 13, textAlign: "center", margin: "0 0 6px 0", fontStyle: "italic", color: TONE_COLORS_LIGHT[0] }}>
           {renderPinyinTone(card.exPy, false)}
         </p>
-      )}
+      ))}
 
       {/* Translation reveal */}
       {!showEs ? (
@@ -1022,7 +1023,7 @@ function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
                 <div>
                   <p style={{ color: "white", fontSize: 17, fontWeight: "bold", margin: "0 0 2px 0" }}>{c.zh}</p>
-                  <p style={{ fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.py, true)}</p>
+                  {showPinyin && <p style={{ fontSize: 12, fontStyle: "italic", margin: "0 0 6px 0", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.py, true)}</p>}
                 </div>
                 <button onClick={() => speak(c.zh.replace(/[❌✅]/g, ""))} style={{
                   background: "none", border: `1px solid ${cat.color}66`, borderRadius: 20,
@@ -1032,7 +1033,7 @@ function App() {
               <p style={{ color: "#ccc", fontSize: 13, margin: "0 0 8px 0", lineHeight: 1.4 }}>{c.es}</p>
               <div style={{ background: `${cat.color}12`, borderRadius: 10, padding: "8px 12px" }}>
                 <p style={{ color: cat.color, fontSize: 13, margin: "0 0 2px 0" }}>{c.exZh}</p>
-                <p style={{ fontSize: 11, margin: "0 0 2px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.exPy, true)}</p>
+                {showPinyin && <p style={{ fontSize: 11, margin: "0 0 2px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(c.exPy, true)}</p>}
                 <p style={{ color: "#aaa", fontSize: 12, margin: 0 }}>{c.exEs}</p>
               </div>
             </div>
@@ -1375,7 +1376,7 @@ function App() {
           {showBuildAnswer && (
             <div style={{ background: `${color2.accent}15`, borderRadius: 14, padding: "12px 16px", marginBottom: 16, textAlign: "center" }}>
               <p style={{ fontSize: 22, color: color2.accent, fontWeight: "bold", margin: "0 0 4px 0" }}>{buildCard.zh}</p>
-              <p style={{ fontSize: 14, margin: "0 0 4px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(buildCard.py, true)}</p>
+              {showPinyin && <p style={{ fontSize: 14, margin: "0 0 4px 0", fontStyle: "italic", color: TONE_COLORS_DARK[0] }}>{renderPinyinTone(buildCard.py, true)}</p>}
               <p style={{ fontSize: 13, color: "#ccc", margin: 0 }}>{buildCard.es}</p>
             </div>
           )}
@@ -1464,7 +1465,7 @@ function App() {
                   }}>
                     {speaking ? "🔊 Reproduciendo..." : "🔊 Escuchar"}
                   </button>
-                  <FrontPinyinReveal pinyin={card.py} cardId={card.id} />
+                  <FrontPinyinReveal pinyin={card.py} cardId={card.id} showPinyin={showPinyin} />
                 </>
               )}
               {studyDir === "es→zh" && (
@@ -1499,7 +1500,7 @@ function App() {
                 {showExample ? "▲ Ocultar ejemplo" : "▼ Ver ejemplo"}
               </button>
 
-              {showExample && <ExampleBox card={card} color={color} speak={speak} speaking={speaking} />}
+              {showExample && <ExampleBox card={card} color={color} speak={speak} speaking={speaking} showPinyin={showPinyin} />}
             </>
           )}
         </div>
