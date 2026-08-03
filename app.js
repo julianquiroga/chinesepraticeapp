@@ -407,10 +407,7 @@ function App() {
   const registerResult = (correct) => {
     setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
     recordActivity(streak, setStreak);
-    if (correct) {
-      speak(buildCard.zh);
-      setTimeout(() => nextBuildCard(), 1200);
-    }
+    if (correct) speak(buildCard.zh);
   };
 
   // Nivel medio: verificación manual (puede quedar fichas señuelo sin usar)
@@ -1057,7 +1054,7 @@ function App() {
             }}>
               🔊
             </button>
-            {!showBuildAnswer ? (
+            {!showBuildAnswer && !resolved ? (
               <button onClick={() => setShowBuildAnswer(true)} style={{
                 flex: 1, padding: "12px 0", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
                 background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
