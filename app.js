@@ -330,6 +330,46 @@ function ProgressRing({ pct, size = 84, color = "#FF9D3D" }) {
   );
 }
 
+// ---------- Navegación principal (tabbar fijo) ----------
+const HUB_MODES = ["menu", "patterns", "buildHub", "settings"];
+const TABS = [
+  { key: "menu", icon: "🏠", label: "Inicio" },
+  { key: "patterns", icon: "📐", label: "Patrones" },
+  { key: "buildHub", icon: "✏️", label: "Construir" },
+  { key: "settings", icon: "⚙️", label: "Opciones" },
+];
+
+function TabBar({ activeMode, setMode }) {
+  return (
+    <>
+      <style>{`.gwc-tab:active { transform: scale(0.9); }`}</style>
+      <div style={{
+        position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 40,
+        display: "flex", justifyContent: "space-around", alignItems: "center",
+        background: "rgba(18,9,3,0.94)", backdropFilter: "blur(10px)",
+        borderTop: "1px solid rgba(255,255,255,0.08)",
+        paddingTop: 8, paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))",
+      }}>
+        {TABS.map(tab => {
+          const active = activeMode === tab.key;
+          return (
+            <button key={tab.key} className="gwc-tab" onClick={() => setMode(tab.key)} style={{
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+              background: "none", border: "none", cursor: "pointer",
+              padding: "4px 14px", color: active ? "#FF9D3D" : "rgba(255,255,255,0.45)",
+              fontSize: 10, fontFamily: "sans-serif", fontWeight: 700,
+              transition: "color 0.15s ease, transform 0.1s ease"
+            }}>
+              <span style={{ fontSize: 20, lineHeight: 1, filter: active ? "none" : "grayscale(0.5) opacity(0.75)" }}>{tab.icon}</span>
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 function App() {
   const initialPrefs = loadPrefs();
   const [selectedUnits, setSelectedUnits] = useState(initialPrefs.selectedUnits);
@@ -581,19 +621,11 @@ function App() {
   const back_es = card?.es;
 
   if (mode === "menu") return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", fontFamily: "'Georgia', serif" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", paddingBottom: "calc(24px + 64px + env(safe-area-inset-bottom, 0px))", fontFamily: "'Georgia', serif" }}>
       <div style={{ maxWidth: 480, width: "100%" }}>
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
-          <div>
-            <h1 style={{ color: "#FF9D3D", fontSize: 24, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>🏯 长城汉语</h1>
-          </div>
-          <button onClick={() => setMode("settings")} style={{
-            background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 12, padding: "8px 12px", color: "#ccc", fontSize: 18, cursor: "pointer"
-          }}>
-            ⚙️
-          </button>
+        <div style={{ marginBottom: 18 }}>
+          <h1 style={{ color: "#FF9D3D", fontSize: 24, fontWeight: "bold", margin: 0, letterSpacing: 1 }}>🏯 长城汉语</h1>
         </div>
 
         {/* Racha + progreso general */}
@@ -679,33 +711,13 @@ function App() {
           Tú eliges el tema: repasa todas las tarjetas de tus unidades seleccionadas
         </p>
 
-        {/* Selector de nivel para Construir frases */}
-        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 12, marginBottom: 10 }}>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            {[
-              { v: "easy", label: "🟢 Fácil" },
-              { v: "medium", label: "🟡 Medio" },
-              { v: "hard", label: "🔴 听写" },
-            ].map(lv => (
-              <button key={lv.v} onClick={() => setBuilderLevel(lv.v)} style={{
-                flex: 1, padding: "7px 0", borderRadius: 10, border: `2px solid ${builderLevel === lv.v ? "#4DD0E1" : "rgba(255,255,255,0.15)"}`,
-                background: builderLevel === lv.v ? "rgba(77,208,225,0.15)" : "transparent",
-                color: builderLevel === lv.v ? "#4DD0E1" : "#888", fontSize: 11, fontWeight: builderLevel === lv.v ? "bold" : "normal",
-                cursor: "pointer", fontFamily: "sans-serif"
-              }}>
-                {lv.label}
-              </button>
-            ))}
-          </div>
-          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
-            width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
-            background: buildableCards.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
-            color: "white", fontSize: 15, fontWeight: "bold",
-            cursor: buildableCards.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
-          }}>
-            ✏️ Construir frases · {buildableCards.length} disponibles
-          </button>
-        </div>
+        <button onClick={() => setMode("buildHub")} style={{
+          width: "100%", padding: "16px 0", borderRadius: 16, marginBottom: 10, border: "none",
+          background: "linear-gradient(135deg, #00838F, #4DD0E1)",
+          color: "white", fontSize: 15, fontWeight: "bold", cursor: "pointer", fontFamily: "sans-serif"
+        }}>
+          ✏️ Construir frases · {buildableCards.length} disponibles
+        </button>
 
         <button onClick={() => setMode("patterns")} style={{
           width: "100%", padding: "16px 0", borderRadius: 16, marginBottom: 18,
@@ -714,22 +726,17 @@ function App() {
         }}>
           📐 Patrones gramaticales · {PATTERN_CATEGORIES.reduce((sum, c) => sum + c.ids.length, 0)}
         </button>
-
-        <p onClick={() => setMode("settings")} style={{ textAlign: "center", color: "#666", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif" }}>
-          ⚙️ Unidades, dirección, audio y más
-        </p>
       </div>
+      <TabBar activeMode={mode} setMode={setMode} />
     </div>
   );
 
   // Pantalla de opciones: dirección, audio, pinyin, selector de unidades, reiniciar progreso
   if (mode === "settings") return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", fontFamily: "'Georgia', serif" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00 0%, #3d1a00 50%, #1a0a00 100%)", display: "flex", flexDirection: "column", alignItems: "center", padding: "24px 16px", paddingBottom: "calc(24px + 64px + env(safe-area-inset-bottom, 0px))", fontFamily: "'Georgia', serif" }}>
       <div style={{ maxWidth: 500, width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13, fontFamily: "sans-serif" }}>← Inicio</button>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <span style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold", fontFamily: "sans-serif" }}>⚙️ Opciones</span>
-          <span style={{ width: 50 }} />
         </div>
 
         {/* Direction */}
@@ -834,6 +841,7 @@ function App() {
           Reiniciar progreso guardado
         </p>
       </div>
+      <TabBar activeMode={mode} setMode={setMode} />
     </div>
   );
 
@@ -887,12 +895,10 @@ function App() {
 
   // Modo: lista de categorías de patrones
   if (mode === "patterns") return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", fontFamily: "sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", paddingBottom: "calc(20px + 64px + env(safe-area-inset-bottom, 0px))", fontFamily: "sans-serif" }}>
       <div style={{ maxWidth: 480, width: "100%" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <button onClick={() => setMode("menu")} style={{ color: "#aaa", background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>← Menú</button>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <span style={{ color: "#FF9D3D", fontSize: 15, fontWeight: "bold" }}>📐 Patrones gramaticales</span>
-          <span style={{ width: 40 }} />
         </div>
         <p style={{ color: "#FFD09B", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 1.5 }}>
           Las estructuras se repiten en muchas unidades. Aquí están agrupadas por tipo, sin importar en qué semana las viste.
@@ -919,6 +925,7 @@ function App() {
           );
         })}
       </div>
+      <TabBar activeMode={mode} setMode={setMode} />
     </div>
   );
 
@@ -1006,6 +1013,48 @@ function App() {
           </button>
         </div>
       </div>
+    </div>
+  );
+
+  // Tab: Construir — elegir nivel y empezar
+  if (mode === "buildHub") return (
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #1a0a00, #3d1a00, #1a0a00)", display: "flex", flexDirection: "column", alignItems: "center", padding: "20px 16px", paddingBottom: "calc(20px + 64px + env(safe-area-inset-bottom, 0px))", fontFamily: "sans-serif" }}>
+      <div style={{ maxWidth: 480, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
+          <span style={{ color: "#4DD0E1", fontSize: 15, fontWeight: "bold" }}>✏️ Construir frases</span>
+        </div>
+        <p style={{ color: "#FFD09B", fontSize: 13, textAlign: "center", marginBottom: 20, lineHeight: 1.5 }}>
+          Arma la frase en chino con las fichas, o escríbela de memoria en 听写. Elige el nivel:
+        </p>
+
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 12, marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            {[
+              { v: "easy", label: "🟢 Fácil" },
+              { v: "medium", label: "🟡 Medio" },
+              { v: "hard", label: "🔴 听写" },
+            ].map(lv => (
+              <button key={lv.v} onClick={() => setBuilderLevel(lv.v)} style={{
+                flex: 1, padding: "7px 0", borderRadius: 10, border: `2px solid ${builderLevel === lv.v ? "#4DD0E1" : "rgba(255,255,255,0.15)"}`,
+                background: builderLevel === lv.v ? "rgba(77,208,225,0.15)" : "transparent",
+                color: builderLevel === lv.v ? "#4DD0E1" : "#888", fontSize: 11, fontWeight: builderLevel === lv.v ? "bold" : "normal",
+                cursor: "pointer", fontFamily: "sans-serif"
+              }}>
+                {lv.label}
+              </button>
+            ))}
+          </div>
+          <button onClick={startBuild} disabled={buildableCards.length === 0} style={{
+            width: "100%", padding: "13px 0", borderRadius: 12, border: "none",
+            background: buildableCards.length === 0 ? "#444" : "linear-gradient(135deg, #00838F, #4DD0E1)",
+            color: "white", fontSize: 15, fontWeight: "bold",
+            cursor: buildableCards.length === 0 ? "not-allowed" : "pointer", fontFamily: "sans-serif"
+          }}>
+            ✏️ Comenzar · {buildableCards.length} disponibles
+          </button>
+        </div>
+      </div>
+      <TabBar activeMode={mode} setMode={setMode} />
     </div>
   );
 
