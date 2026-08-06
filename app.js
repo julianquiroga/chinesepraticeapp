@@ -608,6 +608,13 @@ function App() {
     }
   };
 
+  const prevBuildCard = () => {
+    if (buildIdx === 0) return;
+    const prev = buildIdx - 1;
+    setBuildIdx(prev);
+    shuffleTilesFor(buildDeck[prev]);
+  };
+
   const registerResult = (correct) => {
     setBuildStats(prev => ({ ...prev, correct: prev.correct + (correct ? 1 : 0), wrong: prev.wrong + (correct ? 0 : 1) }));
     recordActivity(streak, setStreak);
@@ -1396,6 +1403,14 @@ function App() {
 
           {/* Bottom actions */}
           <div style={{ display: "flex", gap: 8 }}>
+            {buildIdx > 0 && (
+              <button onClick={prevBuildCard} style={{
+                padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
+                background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
+              }}>
+                ← Anterior
+              </button>
+            )}
             <button onClick={() => speak(buildCard.zh)} style={{
               padding: "12px 16px", borderRadius: 14, border: "1px solid rgba(255,255,255,0.2)",
               background: "rgba(255,255,255,0.06)", color: "#aaa", fontSize: 13, cursor: "pointer"
